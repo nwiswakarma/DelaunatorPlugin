@@ -1,0 +1,27 @@
+{
+	"PluginFileVersion" : 1,
+
+	"FriendlyName" : "Delaunator CPP",
+	"Version" : 1,
+	"VersionName" : "1.0.0",
+	"CreatedBy" : "", 
+	"CreatedByURL" : "",
+	"Description" : "",
+	"Category" : "Programming",
+	"Modules" :
+	[
+		{
+			"Name" : "DelaunatorPlugin",
+			"Type" : "Runtime",
+			"LoadingPhase" : "Default",
+			"WhitelistPlatforms" : [ "Win64", "Win32", "Mac" ]
+		}
+	],
+	"Plugins":
+    [
+		{
+			"Name" : "GeometryUtilityLibrary",
+			"Enabled": true
+		}
+	]
+}
