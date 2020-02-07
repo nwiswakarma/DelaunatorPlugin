@@ -33,7 +33,7 @@ void UDelaunatorUtility::GenerateDelaunatorObject(TArray<FIntVector>& OutTriangl
     const float* PointData = reinterpret_cast<const float*>(InPoints.GetData());
     delaunator::Delaunator Delaunator(PointData, InPoints.Num()*2);
 
-    const int32 TriCount = Delaunator.triangles.size() / 3;
+    const int32 TriCount = Delaunator.triangles.Num() / 3;
 
     OutTriangles.SetNumUninitialized(TriCount);
 
@@ -56,15 +56,17 @@ void UDelaunatorUtility::GenerateDelaunatorIndices(TArray<int32>& OutTriangles, 
     const float* PointData = reinterpret_cast<const float*>(InPoints.GetData());
     delaunator::Delaunator Delaunator(PointData, InPoints.Num()*2);
 
-    check(Delaunator.triangles.size() == Delaunator.halfedges.size());
+    check(Delaunator.triangles.Num() == Delaunator.halfedges.Num());
 
-    const int32 TypeSize = OutTriangles.GetTypeSize();
-    const int32 IndexNum = Delaunator.triangles.size();
+    const SIZE_T TypeSize = OutTriangles.GetTypeSize();
+    const int32 IndexNum = Delaunator.triangles.Num();
 
-    OutTriangles.SetNumUninitialized(IndexNum);
-    OutHalfEdges.SetNumUninitialized(IndexNum);
+    //OutTriangles.SetNumUninitialized(IndexNum);
+    //OutHalfEdges.SetNumUninitialized(IndexNum);
 
-    FMemory::Memcpy(OutTriangles.GetData(), Delaunator.triangles.data(), IndexNum*TypeSize);
+    //FMemory::Memcpy(OutTriangles.GetData(), Delaunator.triangles.GetData(), IndexNum*TypeSize);
+    //FMemory::Memcpy(OutHalfEdges.GetData(), Delaunator.halfedges.GetData(), IndexNum*TypeSize);
 
-    FMemory::Memcpy(OutHalfEdges.GetData(), Delaunator.halfedges.data(), IndexNum*TypeSize);
+    OutTriangles = Delaunator.triangles;
+    OutHalfEdges = Delaunator.halfedges;
 }
