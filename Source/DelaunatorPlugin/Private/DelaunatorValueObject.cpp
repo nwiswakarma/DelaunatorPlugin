@@ -25,27 +25,37 @@
 ////////////////////////////////////////////////////////////////////////////////
 // 
 
-#pragma once
+#include "DelaunatorValueObject.h"
 
-#include "CoreMinimal.h"
-#include "Kismet/BlueprintFunctionLibrary.h"
-#include "DelaunatorUtility.generated.h"
-
-class UDelaunatorObject;
-
-UCLASS()
-class DELAUNATORPLUGIN_API UDelaunatorUtility : public UBlueprintFunctionLibrary
+void UDelaunatorValueObject::SetOwner(UDelaunatorObject* InDelaunatorObject)
 {
-    GENERATED_BODY()
+    DelaunatorObject = InDelaunatorObject;
+}
 
-public:
+void UDelaunatorValueObject::InitializePointValues()
+{
+    if (DelaunatorObject.IsValid())
+    {
+        InitializeValues(DelaunatorObject->GetPointCount());
+    }
+}
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
-    static UDelaunatorObject* GenerateDelaunatorObject(UObject* Outer, const TArray<FVector2D>& InPoints);
+void UDelaunatorValueObject::InitializeTriangleValues()
+{
+    if (DelaunatorObject.IsValid())
+    {
+        InitializeValues(DelaunatorObject->GetTriangleCount());
+    }
+}
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
-    static void GenerateDelaunatorTriangles(TArray<FIntVector>& OutTriangles, const TArray<FVector2D>& InPoints);
+void UDelaunatorIntValueObject::InitializeValues(int32 ValueCount)
+{
+    Values.Reset(ValueCount);
+    Values.SetNumZeroed(ValueCount);
+}
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
-    static void GenerateDelaunatorIndices(TArray<int32>& OutTriangles, TArray<int32>& OutHalfEdges, const TArray<FVector2D>& InPoints);
-};
+void UDelaunatorFloatValueObject::InitializeValues(int32 ValueCount)
+{
+    Values.Reset(ValueCount);
+    Values.SetNumZeroed(ValueCount);
+}

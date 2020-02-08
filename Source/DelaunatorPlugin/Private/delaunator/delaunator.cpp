@@ -1,206 +1,21 @@
-
 #include "delaunator/delaunator.hpp"
 
-namespace delaunator {
-
-//@see https://stackoverflow.com/questions/33333363/built-in-mod-vs-custom-mod-function-improve-the-performance-of-modulus-op/33333636#33333636
-inline FIndex fast_mod(const FIndex i, const FIndex c)
+namespace delaunator
 {
-    return i >= c ? i % c : i;
+
+Delaunator::Delaunator()
+    : coords(),
+      triangles(),
+      halfedges(),
+      hull_prev(),
+      hull_next(),
+      hull_tri(),
+      hull_start(),
+      m_hash(),
+      m_hash_size(),
+      m_edge_stack()
+{
 }
-
-// Kahan and Babuska summation, Neumaier variant; accumulates less FP error
-inline FReal sum(const TArray<FReal>& x)
-{
-    FReal sum = x[0];
-    FReal err = 0.0;
-
-    for (FIndex i = 1; i < x.Num(); i++) {
-        const FReal k = x[i];
-        const FReal m = sum + k;
-        err += FMath::Abs(sum) >= FMath::Abs(k) ? sum - m + k : k - m + sum;
-        sum = m;
-    }
-    return sum + err;
-}
-
-inline FReal dist(
-    const FReal ax,
-    const FReal ay,
-    const FReal bx,
-    const FReal by
-    )
-{
-    const FReal dx = ax - bx;
-    const FReal dy = ay - by;
-    return dx * dx + dy * dy;
-}
-
-inline FReal circumradius(
-    const FReal ax,
-    const FReal ay,
-    const FReal bx,
-    const FReal by,
-    const FReal cx,
-    const FReal cy
-    )
-{
-    const FReal dx = bx - ax;
-    const FReal dy = by - ay;
-    const FReal ex = cx - ax;
-    const FReal ey = cy - ay;
-
-    const FReal bl = dx * dx + dy * dy;
-    const FReal cl = ex * ex + ey * ey;
-    const FReal d = dx * ey - dy * ex;
-
-    const FReal x = (ey * bl - dy * cl) * 0.5 / d;
-    const FReal y = (dx * cl - ex * bl) * 0.5 / d;
-
-    if ((bl > 0.0 || bl < 0.0) && (cl > 0.0 || cl < 0.0) && (d > 0.0 || d < 0.0)) {
-        return x * x + y * y;
-    } else {
-        return TNumericLimits<FReal>::Max();
-    }
-}
-
-inline bool orient(
-    const FReal px,
-    const FReal py,
-    const FReal qx,
-    const FReal qy,
-    const FReal rx,
-    const FReal ry
-    )
-{
-    return (qy - py) * (rx - qx) - (qx - px) * (ry - qy) < 0.0;
-}
-
-inline void circumcenter(
-    FReal& centerx,
-    FReal& centery,
-    const FReal ax,
-    const FReal ay,
-    const FReal bx,
-    const FReal by,
-    const FReal cx,
-    const FReal cy
-    )
-{
-    const FReal dx = bx - ax;
-    const FReal dy = by - ay;
-    const FReal ex = cx - ax;
-    const FReal ey = cy - ay;
-
-    const FReal bl = dx * dx + dy * dy;
-    const FReal cl = ex * ex + ey * ey;
-    const FReal d = dx * ey - dy * ex;
-
-    const FReal x = ax + (ey * bl - dy * cl) * 0.5 / d;
-    const FReal y = ay + (dx * cl - ex * bl) * 0.5 / d;
-
-    centerx = x;
-    centery = y;
-}
-
-
-struct compare
-{
-    TArrayView<const FReal> coords;
-    TArray<FReal> dists;
-
-    compare(const TArrayView<const FReal>& in_coords, FReal centerx, FReal centery)
-        : coords(in_coords)
-    {
-        FIndex n = coords.Num() / 2;
-        dists.Reserve(n);
-        FReal const *xcoord = coords.GetData();
-        FReal const *ycoord = coords.GetData()+1;
-        while (n--)
-        {
-            dists.Emplace(dist(*xcoord, *ycoord, centerx, centery));
-            xcoord += 2;
-            ycoord += 2;
-        }
-    }
-
-    bool operator()(FIndex i, FIndex j) const
-    {
-        const FReal diff1 = dists[i] - dists[j];
-        const FReal diff2 = coords[2 * i] - coords[2 * j];
-        const FReal diff3 = coords[2 * i + 1] - coords[2 * j + 1];
-
-        //ABELL - Not sure why we're not just checking != 0 here.
-        if (diff1 > 0.0 || diff1 < 0.0)
-        {
-            return diff1 < 0;
-        }
-        else
-        if (diff2 > 0.0 || diff2 < 0.0)
-        {
-            return diff2 < 0;
-        }
-        else
-        {
-            return diff3 < 0;
-        }
-    }
-};
-
-
-inline bool in_circle(
-    const FReal ax,
-    const FReal ay,
-    const FReal bx,
-    const FReal by,
-    const FReal cx,
-    const FReal cy,
-    const FReal px,
-    const FReal py
-    )
-{
-    const FReal dx = ax - px;
-    const FReal dy = ay - py;
-    const FReal ex = bx - px;
-    const FReal ey = by - py;
-    const FReal fx = cx - px;
-    const FReal fy = cy - py;
-
-    const FReal ap = dx * dx + dy * dy;
-    const FReal bp = ex * ex + ey * ey;
-    const FReal cp = fx * fx + fy * fy;
-
-    return (dx * (ey * cp - bp * fy) -
-            dy * (ex * cp - bp * fx) +
-            ap * (ex * fy - ey * fx)) < 0.0;
-}
-
-//constexpr FReal EPSILON = std::numeric_limits<FReal>::epsilon();
-constexpr FReal EPSILON = KINDA_SMALL_NUMBER;
-
-inline bool check_pts_equal(FReal x1, FReal y1, FReal x2, FReal y2)
-{
-    return FMath::Abs(x1 - x2) <= EPSILON &&
-           FMath::Abs(y1 - y2) <= EPSILON;
-}
-
-// monotonically increases with real angle, but doesn't need expensive trigonometry
-inline FReal pseudo_angle(const FReal dx, const FReal dy)
-{
-    const FReal p = dx / (FMath::Abs(dx) + FMath::Abs(dy));
-    return (dy > 0.0 ? 3.0 - p : 1.0 + p) / 4.0; // [0..1)
-}
-
-struct DelaunatorPoint
-{
-    FIndex i;
-    FReal x;
-    FReal y;
-    FIndex t;
-    FIndex prev;
-    FIndex next;
-    bool removed;
-};
 
 Delaunator::Delaunator(const FReal* in_coords, FIndex in_coords_num)
     : coords(in_coords, in_coords_num),
@@ -217,9 +32,21 @@ Delaunator::Delaunator(const FReal* in_coords, FIndex in_coords_num)
     update();
 }
 
+void Delaunator::update(const TArray<FVector2D>& InPoints)
+{
+    if (InPoints.Num() >= 3)
+    {
+        coords = MakeArrayView(
+            reinterpret_cast<const float*>(InPoints.GetData()),
+            InPoints.Num()*2
+            );
+
+        update();
+    }
+}
+
 void Delaunator::update()
 {
-    //FIndex n = coords_num >> 1;
     FIndex n = coords.Num() >> 1;
 
     FReal max_x = TNumericLimits<FReal>::Min();
@@ -228,9 +55,10 @@ void Delaunator::update()
     FReal min_y = TNumericLimits<FReal>::Max();
 
     TArray<FIndex> ids;
-    ids.Reserve(n);
+    ids.SetNumUninitialized(n);
 
-    for (FIndex i = 0; i < n; i++) {
+    for (FIndex i=0; i<n; ++i)
+    {
         const FReal x = coords[2 * i];
         const FReal y = coords[2 * i + 1];
 
@@ -239,7 +67,7 @@ void Delaunator::update()
         if (x > max_x) max_x = x;
         if (y > max_y) max_y = y;
 
-        ids.Emplace(i);
+        ids[i] = i;
     }
     const FReal cx = (min_x + max_x) / 2;
     const FReal cy = (min_y + max_y) / 2;
@@ -250,9 +78,13 @@ void Delaunator::update()
     FIndex i2 = INVALID_INDEX;
 
     // pick a seed point close to the centroid
-    for (FIndex i = 0; i < n; i++) {
+
+    for (FIndex i = 0; i < n; i++)
+    {
         const FReal d = dist(cx, cy, coords[2 * i], coords[2 * i + 1]);
-        if (d < min_dist) {
+
+        if (d < min_dist)
+        {
             i0 = i;
             min_dist = d;
         }
@@ -264,10 +96,13 @@ void Delaunator::update()
     min_dist = TNumericLimits<FReal>::Max();
 
     // find the point closest to the seed
-    for (FIndex i = 0; i < n; i++) {
+
+    for (FIndex i = 0; i < n; i++)
+    {
         if (i == i0) continue;
         const FReal d = dist(i0x, i0y, coords[2 * i], coords[2 * i + 1]);
-        if (d < min_dist && d > 0.0) {
+        if (d < min_dist && d > 0.0)
+        {
             i1 = i;
             min_dist = d;
         }
@@ -280,13 +115,16 @@ void Delaunator::update()
 
     // find the third point which forms
     // the smallest circumcircle with the first two
-    for (FIndex i = 0; i < n; i++) {
+
+    for (FIndex i = 0; i < n; i++)
+    {
         if (i == i0 || i == i1) continue;
 
         const FReal r = circumradius(
             i0x, i0y, i1x, i1y, coords[2 * i], coords[2 * i + 1]);
 
-        if (r < min_radius) {
+        if (r < min_radius)
+        {
             i2 = i;
             min_radius = r;
         }
@@ -297,17 +135,19 @@ void Delaunator::update()
     FReal i2x = coords[2 * i2];
     FReal i2y = coords[2 * i2 + 1];
 
-    if (orient(i0x, i0y, i1x, i1y, i2x, i2y)) {
+    // swap the order of the seed points for counter-clockwise orientation
+    if (orient(i0x, i0y, i1x, i1y, i2x, i2y))
+    {
         Swap(i1, i2);
         Swap(i1x, i2x);
         Swap(i1y, i2y);
     }
 
+    // sort the points by distance from the seed triangle circumcenter
+
     circumcenter(m_centerx, m_centery, i0x, i0y, i1x, i1y, i2x, i2y);
 
-    // sort the points by distance from the seed triangle circumcenter
-    compare compare_inst(coords, m_centerx, m_centery);
-    ids.Sort(compare_inst);
+    ids.Sort(compare(coords, m_centerx, m_centery));
 
     // initialize a hash table for storing edges of the advancing convex hull
     m_hash_size = FMath::CeilToInt(FMath::Sqrt(n));
@@ -319,8 +159,9 @@ void Delaunator::update()
     hull_next.SetNumUninitialized(n);
     hull_tri.SetNumUninitialized(n);
 
-    hull_start = i0;
+    // set up the seed triangle as the starting hull
 
+    hull_start = i0;
     FIndex hull_size = 3;
 
     hull_next[i0] = hull_prev[i2] = i1;
@@ -336,49 +177,73 @@ void Delaunator::update()
     m_hash[hash_key(i2x, i2y)] = i2;
 
     FIndex max_triangles = n < 3 ? 1 : 2 * n - 5;
-    triangles.Reserve(max_triangles * 3);
-    halfedges.Reserve(max_triangles * 3);
+    triangles.Reset(max_triangles * 3);
+    halfedges.Reset(max_triangles * 3);
+
     add_triangle(i0, i1, i2, INVALID_INDEX, INVALID_INDEX, INVALID_INDEX);
+
     FReal xp = BIG_NUMBER; // = std::numeric_limits<FReal>::quiet_NaN();
     FReal yp = BIG_NUMBER; // = std::numeric_limits<FReal>::quiet_NaN();
-    for (FIndex k = 0; k < n; k++) {
+
+    for (FIndex k = 0; k < n; k++)
+    {
         const FIndex i = ids[k];
         const FReal x = coords[2 * i];
         const FReal y = coords[2 * i + 1];
 
         // skip near-duplicate points
-        if (k > 0 && check_pts_equal(x, y, xp, yp)) continue;
+        if (k > 0 && check_pts_equal(x, y, xp, yp))
+        {
+            continue;
+        }
+
         xp = x;
         yp = y;
 
         // skip seed triangle points
-        if (
-            check_pts_equal(x, y, i0x, i0y) ||
+        if (check_pts_equal(x, y, i0x, i0y) ||
             check_pts_equal(x, y, i1x, i1y) ||
-            check_pts_equal(x, y, i2x, i2y)) continue;
+            check_pts_equal(x, y, i2x, i2y))
+        {
+            continue;
+        }
 
         // find a visible edge on the convex hull using edge hash
-        FIndex start = 0;
 
+        FIndex start = 0;
         FIndex key = hash_key(x, y);
-        for (FIndex j = 0; j < m_hash_size; j++) {
+
+        for (FIndex j = 0; j < m_hash_size; j++)
+        {
             start = m_hash[fast_mod(key + j, m_hash_size)];
-            if (start != INVALID_INDEX && start != hull_next[start]) break;
+
+            if (start != INVALID_INDEX && start != hull_next[start])
+            {
+                break;
+            }
         }
 
         start = hull_prev[start];
         FIndex e = start;
         FIndex q;
 
-        while (q = hull_next[e], !orient(x, y, coords[2 * e], coords[2 * e + 1], coords[2 * q], coords[2 * q + 1])) { //TODO: does it works in a same way as in JS
+        while (
+            q = hull_next[e],
+            !orient(x, y, coords[2 * e], coords[2 * e + 1], coords[2 * q], coords[2 * q + 1]))
+        {
             e = q;
-            if (e == start) {
+
+            if (e == start)
+            {
                 e = INVALID_INDEX;
                 break;
             }
         }
 
-        if (e == INVALID_INDEX) continue; // likely a near-duplicate point; skip it
+        if (e == INVALID_INDEX)
+        {
+            continue; // likely a near-duplicate point; skip it
+        }
 
         // add the first triangle from the point
         FIndex t = add_triangle(
@@ -398,7 +263,8 @@ void Delaunator::update()
         FIndex next = hull_next[e];
         while (
             q = hull_next[next],
-            orient(x, y, coords[2 * next], coords[2 * next + 1], coords[2 * q], coords[2 * q + 1])) {
+            orient(x, y, coords[2 * next], coords[2 * next + 1], coords[2 * q], coords[2 * q + 1]))
+        {
             t = add_triangle(next, i, q, hull_tri[i], INVALID_INDEX, hull_tri[next]);
             hull_tri[i] = legalize(t + 2);
             hull_next[next] = next; // mark as removed
@@ -408,10 +274,12 @@ void Delaunator::update()
 
         // walk backward from the other side,
         // adding more triangles and flipping
-        if (e == start) {
+        if (e == start)
+        {
             while (
                 q = hull_prev[e],
-                orient(x, y, coords[2 * q], coords[2 * q + 1], coords[2 * e], coords[2 * e + 1])) {
+                orient(x, y, coords[2 * q], coords[2 * q + 1], coords[2 * e], coords[2 * e + 1]))
+            {
                 t = add_triangle(q, i, e, INVALID_INDEX, hull_tri[e], hull_tri[q]);
                 legalize(t + 2);
                 hull_tri[q] = t;
@@ -431,19 +299,14 @@ void Delaunator::update()
         m_hash[hash_key(x, y)] = i;
         m_hash[hash_key(coords[2 * e], coords[2 * e + 1])] = e;
     }
+
+    // trim allocation sizes
+    triangles.Shrink();
+    halfedges.Shrink();
 }
 
-FReal Delaunator::get_hull_area() {
-    TArray<FReal> hull_area;
-    FIndex e = hull_start;
-    do {
-        hull_area.Emplace((coords[2 * e] - coords[2 * hull_prev[e]]) * (coords[2 * e + 1] + coords[2 * hull_prev[e] + 1]));
-        e = hull_next[e];
-    } while (e != hull_start);
-    return sum(hull_area);
-}
-
-FIndex Delaunator::legalize(FIndex a) {
+FIndex Delaunator::legalize(FIndex a)
+{
     FIndex i = 0;
     FIndex ar = 0;
     m_edge_stack.Reset();
@@ -533,91 +396,32 @@ FIndex Delaunator::legalize(FIndex a) {
             link(ar, bl);
             FIndex br = b0 + (b + 1) % 3;
 
-            if (i < m_edge_stack.Num()) {
+            if (i < m_edge_stack.Num())
+            {
                 m_edge_stack[i] = br;
-            } else {
+            }
+            else
+            {
                 m_edge_stack.Emplace(br);
             }
             i++;
 
-        } else {
-            if (i > 0) {
+        }
+        else
+        {
+            if (i > 0)
+            {
                 i--;
                 a = m_edge_stack[i];
                 continue;
-            } else {
+            }
+            else
+            {
                 break;
             }
         }
     }
     return ar;
-}
-
-FIndex Delaunator::hash_key(const FReal x, const FReal y) const
-{
-    const FReal dx = x - m_centerx;
-    const FReal dy = y - m_centery;
-    return fast_mod(
-        FMath::FloorToInt(pseudo_angle(dx, dy) * static_cast<FReal>(m_hash_size)),
-        m_hash_size
-        );
-}
-
-FIndex Delaunator::add_triangle(
-    FIndex i0,
-    FIndex i1,
-    FIndex i2,
-    FIndex a,
-    FIndex b,
-    FIndex c
-    )
-{
-    FIndex t = triangles.Num();
-    triangles.Emplace(i0);
-    triangles.Emplace(i1);
-    triangles.Emplace(i2);
-    link(t, a);
-    link(t + 1, b);
-    link(t + 2, c);
-    return t;
-}
-
-void Delaunator::link(const FIndex a, const FIndex b)
-{
-    FIndex s = halfedges.Num();
-
-    if (a == s)
-    {
-        halfedges.Emplace(b);
-    }
-    else
-    if (a < s)
-    {
-        halfedges[a] = b;
-    }
-    else
-    {
-        checkf(false, TEXT("Cannot link edge"));
-    }
-
-    if (b != INVALID_INDEX)
-    {
-        FIndex s2 = halfedges.Num();
-
-        if (b == s2)
-        {
-            halfedges.Emplace(a);
-        }
-        else
-        if (b < s2)
-        {
-            halfedges[b] = a;
-        }
-        else
-        {
-            checkf(false, TEXT("Cannot link edge"));
-        }
-    }
 }
 
 } //namespace delaunator
