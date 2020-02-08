@@ -26,6 +26,7 @@
 // 
 
 #include "DelaunatorObject.h"
+#include "Poly/GULPolyUtilityLibrary.h"
 
 void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
 {
@@ -413,9 +414,9 @@ bool UDelaunatorObject::FindBoundaryPoints(
     return false;
 }
 
-bool UDelaunatorObject::FindPolyIntersectTriangles(
+bool UDelaunatorObject::FindPolyBoundaryTriangles(
     TArray<int32>& OutTriangles,
-    const TArray<int32>& InPolyPoints,
+    const TArray<int32>& InPolyPointIndices,
     bool bClosedPoly
     )
 {
@@ -423,28 +424,28 @@ bool UDelaunatorObject::FindPolyIntersectTriangles(
 
     const TArray<FVector2D>& InPoints(GetPoints());
     const TArray<int32>& InTriangles(GetTriangles());
-    const TArray<int32>& InHalfEdges(GetHalfEdges());
 
-    if (! IsValidDelaunatorObject()               ||
-        (! bClosedPoly && InPolyPoints.Num() < 2) ||
-        (  bClosedPoly && InPolyPoints.Num() < 3))
+    if (! IsValidDelaunatorObject()                     ||
+        (! bClosedPoly && InPolyPointIndices.Num() < 2) ||
+        (  bClosedPoly && InPolyPointIndices.Num() < 3))
     {
         return false;
     }
 
-    check(InPoints.IsValidIndex(InPolyPoints[0]));
-    check(InPoints.IsValidIndex(InPolyPoints.Last()));
+    check(InPoints.IsValidIndex(InPolyPointIndices[0]));
+    check(InPoints.IsValidIndex(InPolyPointIndices.Last()));
 
-    const FVector2D& P0(InPoints[InPolyPoints[0]]);
-    const FVector2D& PN(InPoints[InPolyPoints.Last()]);
+    const FVector2D& P0(InPoints[InPolyPointIndices[0]]);
+    const FVector2D& PN(InPoints[InPolyPointIndices.Last()]);
 
     TArray<int32> BoundaryTriangles;
 
-    const int32 PolyPointCount = InPolyPoints.Num();
+    const int32 PolyPointCount = InPolyPointIndices.Num();
     const int32 PointItCount = (! bClosedPoly || P0.Equals(PN))
         ? PolyPointCount-1
         : PolyPointCount;
 
+    // Find all triangles between boundary poly
     for (int32 i=0; i<PointItCount; ++i)
     {
         int32 i0 = i;
@@ -455,8 +456,8 @@ bool UDelaunatorObject::FindPolyIntersectTriangles(
             i1 = 0;
         }
 
-        int32 pi0 = InPolyPoints[i0];
-        int32 pi1 = InPolyPoints[i1];
+        int32 pi0 = InPolyPointIndices[i0];
+        int32 pi1 = InPolyPointIndices[i1];
 
         // Invalid input points, abort
         if (! InPoints.IsValidIndex(pi0) ||
@@ -475,70 +476,38 @@ bool UDelaunatorObject::FindPolyIntersectTriangles(
             pi1
             );
 
-        // Only single triangle between points, no replacement required
+        // Poly line have direct connection within single triangle, skip
         if (TrianglesBetweenPoints.Num() == 1)
         {
             continue;
         }
 
         // Add triangle between points as boundary triangles
-
         BoundaryTriangles.Append(TrianglesBetweenPoints);
     }
 
-    OutTriangles = TSet<int32>(BoundaryTriangles).Array();
-
-#if 0
-    // Assign input triangle indices as initial output indices
-
-    OutTriangles = InTriangles;
-
-    // Generate list of triangle indices to remove
-
-    // Sort descending
-    BoundaryTriangles.Sort(
-        [](const int32& i0, const int32& i1)
-        {
-            return i1 < i0;
-        } );
-
-    // Remove triangles unique
-    {
-        int32 LastRemoved = -1;
-        int32 RemoveCount = 0;
-
-        for (int32 i : BoundaryTriangles)
-        {
-            if (i != LastRemoved)
-            {
-                LastRemoved = i;
-                ++RemoveCount;
-
-                OutTriangles.RemoveAtSwap(i*3, 3, false);
-            }
-        }
-    }
-
-    // Remove all triangles out of poly
+    // Find all boundary triangles out of poly
     {
         TArray<FVector2D> PolyPoints;
-        TSet<int32> BoundarySet(InPolyPoints);
+        TSet<int32> BoundarySet(InPolyPointIndices);
 
-        PolyPoints.SetNumUninitialized(InPolyPoints.Num());
+        PolyPoints.SetNumUninitialized(InPolyPointIndices.Num());
 
-        for (int32 i=0; i<InPolyPoints.Num(); ++i)
+        for (int32 i=0; i<InPolyPointIndices.Num(); ++i)
         {
-            PolyPoints[i] = InPoints[InPolyPoints[i]];
+            PolyPoints[i] = InPoints[InPolyPointIndices[i]];
         }
 
-        int32 It = 0;
+        const int32 TriangleCount = GetTriangleCount();
 
-        while (It < OutTriangles.Num())
+        for (int32 ti=0; ti<TriangleCount; ++ti)
         {
-            int32 pi0 = OutTriangles[It  ];
-            int32 pi1 = OutTriangles[It+1];
-            int32 pi2 = OutTriangles[It+2];
+            int32 i = ti*3;
+            int32 pi0 = InTriangles[i  ];
+            int32 pi1 = InTriangles[i+1];
+            int32 pi2 = InTriangles[i+2];
 
+            // Triangle consists of boundary points
             if (BoundarySet.Contains(pi0) &&
                 BoundarySet.Contains(pi1) &&
                 BoundarySet.Contains(pi2))
@@ -546,17 +515,163 @@ bool UDelaunatorObject::FindPolyIntersectTriangles(
                 FVector2D TriCenter =
                     (InPoints[pi0] + InPoints[pi1] + InPoints[pi2]) / 3.f;
 
+                // Triangle center is outside of poly, mark as boundary triangle
                 if (! UGULPolyUtilityLibrary::IsPointOnPoly(TriCenter, PolyPoints))
                 {
-                    OutTriangles.RemoveAtSwap(It, 3, false);
-                    continue;
+                    BoundaryTriangles.Emplace(ti);
                 }
             }
-
-            It += 3;
         }
     }
-#endif
+
+    OutTriangles = TSet<int32>(BoundaryTriangles).Array();
+
+    return true;
+}
+
+bool UDelaunatorObject::FindPolyGroupsBoundaryTriangles(
+    TArray<int32>& OutTriangles,
+    const TArray<FGULIntGroup>& InPolyBoundaryGroups,
+    bool bClosedPoly
+    )
+{
+    OutTriangles.Reset();
+
+    const TArray<FVector2D>& InPoints(GetPoints());
+    const TArray<int32>& InTriangles(GetTriangles());
+
+    if (! IsValidDelaunatorObject()   ||
+        InPolyBoundaryGroups.Num() < 1)
+    {
+        return false;
+    }
+
+    TArray<int32> BoundaryTriangles;
+
+    for (const FGULIntGroup& PolyBoundaryGroup : InPolyBoundaryGroups)
+    {
+        const TArray<int32>& PolyIndices(PolyBoundaryGroup.Values);
+
+        if ((! bClosedPoly && PolyIndices.Num() < 2) ||
+            (  bClosedPoly && PolyIndices.Num() < 3))
+        {
+            continue;
+        }
+
+        check(InPoints.IsValidIndex(PolyIndices[0]));
+        check(InPoints.IsValidIndex(PolyIndices.Last()));
+
+        const FVector2D& P0(InPoints[PolyIndices[0]]);
+        const FVector2D& PN(InPoints[PolyIndices.Last()]);
+
+        const int32 PolyPointCount = PolyIndices.Num();
+        const int32 PointItCount = (! bClosedPoly || P0.Equals(PN))
+            ? PolyPointCount-1
+            : PolyPointCount;
+
+        for (int32 i=0; i<PointItCount; ++i)
+        {
+            int32 i0 = i;
+            int32 i1 = i+1;
+
+            if (i1 == PolyPointCount)
+            {
+                i1 = 0;
+            }
+
+            int32 pi0 = PolyIndices[i0];
+            int32 pi1 = PolyIndices[i1];
+
+            // Invalid input points, abort
+            if (! InPoints.IsValidIndex(pi0) ||
+                ! InPoints.IsValidIndex(pi1))
+            {
+                return false;
+            }
+
+            // Find triangles between polyline
+
+            TArray<int32> TrianglesBetweenPoints;
+
+            FindTrianglesBetweenPoints(
+                TrianglesBetweenPoints,
+                pi0,
+                pi1
+                );
+
+            // Poly line have direct connection within single triangle, skip
+            if (TrianglesBetweenPoints.Num() == 1)
+            {
+                continue;
+            }
+
+            // Add triangle between points as boundary triangles
+            BoundaryTriangles.Append(TrianglesBetweenPoints);
+        }
+    }
+
+    // Remove all triangles out of poly
+
+    TArray<FGULVector2DGroup> BoundaryPolyGroups;
+    TSet<int32> BoundarySet;
+
+    // Gather poly boundary points and index set
+    for (const FGULIntGroup& PolyBoundaryGroup : InPolyBoundaryGroups)
+    {
+        const TArray<int32>& PolyIndices(PolyBoundaryGroup.Values);
+        const int32 PointCount = PolyIndices.Num();
+
+        BoundaryPolyGroups.AddDefaulted();
+        
+        TArray<FVector2D>& BoundaryPoints(BoundaryPolyGroups.Last().Points);
+        BoundaryPoints.SetNumUninitialized(PointCount);
+
+        for (int32 i=0; i<PointCount; ++i)
+        {
+            BoundaryPoints[i] = InPoints[PolyIndices[i]];
+        }
+
+        BoundarySet.Append(PolyIndices);
+    }
+
+    // Find all boundary triangles out of poly
+
+    const int32 TriangleCount = GetTriangleCount();
+
+    for (int32 ti=0; ti<TriangleCount; ++ti)
+    {
+        int32 i = ti*3;
+        int32 pi0 = InTriangles[i  ];
+        int32 pi1 = InTriangles[i+1];
+        int32 pi2 = InTriangles[i+2];
+
+        // Triangle consists of boundary points
+        if (BoundarySet.Contains(pi0) &&
+            BoundarySet.Contains(pi1) &&
+            BoundarySet.Contains(pi2))
+        {
+            FVector2D TriCenter =
+                (InPoints[pi0] + InPoints[pi1] + InPoints[pi2]) / 3.f;
+
+            for (const FGULVector2DGroup& PolyGroup : BoundaryPolyGroups)
+            {
+                bool bPointOnPoly = UGULPolyUtilityLibrary::IsPointOnPoly(
+                    TriCenter,
+                    PolyGroup.Points
+                    );
+
+                // Triangle center is outside of poly,
+                // mark as boundary triangle
+                if (! bPointOnPoly)
+                {
+                    BoundaryTriangles.Emplace(ti);
+                    break;
+                }
+            }
+        }
+    }
+
+    OutTriangles = TSet<int32>(BoundaryTriangles).Array();
 
     return true;
 }
