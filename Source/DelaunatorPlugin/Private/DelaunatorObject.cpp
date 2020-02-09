@@ -40,7 +40,7 @@ void UDelaunatorObject::CopyIndices(TArray<int32>& OutTriangles, TArray<int32>& 
     OutHalfEdges = Delaunator.halfedges;
 }
 
-UDelaunatorValueObject* UDelaunatorObject::CreateDefaultPointValueObject(
+UDelaunatorValueObject* UDelaunatorObject::CreateDefaultValueObject(
     UObject* Outer,
     FName ValueName,
     TSubclassOf<UDelaunatorValueObject> ValueType
@@ -51,19 +51,33 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultPointValueObject(
         return nullptr;
     }
 
-    UDelaunatorValueObject* ValueObject = GetPointValueObject(ValueName);
+    UDelaunatorValueObject* ValueObject = GetValueObject(ValueName);
+
+    if (! IsValid(ValueObject))
+    {
+        ValueObject = NewObject<UDelaunatorValueObject>(Outer, ValueType);
+        ValueMap.Emplace(ValueName, ValueObject);
+    }
+
+    return ValueObject;
+}
+
+UDelaunatorValueObject* UDelaunatorObject::CreateDefaultPointValueObject(
+    UObject* Outer,
+    FName ValueName,
+    TSubclassOf<UDelaunatorValueObject> ValueType
+    )
+{
+    UDelaunatorValueObject* ValueObject = CreateDefaultValueObject(
+        Outer,
+        ValueName,
+        ValueType
+        );
 
     if (IsValid(ValueObject))
     {
         ValueObject->SetOwner(this);
         ValueObject->InitializePointValues();
-    }
-    else
-    {
-        ValueObject = NewObject<UDelaunatorValueObject>(Outer, ValueType);
-        ValueObject->SetOwner(this);
-        ValueObject->InitializePointValues();
-        PointValueMap.Emplace(ValueName, ValueObject);
     }
 
     return ValueObject;
@@ -75,30 +89,169 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultTriangleValueObject(
     TSubclassOf<UDelaunatorValueObject> ValueType
     )
 {
-    if (! IsValidDelaunatorObject() || ValueName.IsNone())
-    {
-        return nullptr;
-    }
-
-    UDelaunatorValueObject* ValueObject = GetTriangleValueObject(ValueName);
+    UDelaunatorValueObject* ValueObject = CreateDefaultValueObject(
+        Outer,
+        ValueName,
+        ValueType
+        );
 
     if (IsValid(ValueObject))
     {
         ValueObject->SetOwner(this);
         ValueObject->InitializeTriangleValues();
     }
-    else
-    {
-        ValueObject = NewObject<UDelaunatorValueObject>(Outer, ValueType);
-        ValueObject->SetOwner(this);
-        ValueObject->InitializeTriangleValues();
-        TriangleValueMap.Emplace(ValueName, ValueObject);
-    }
 
     return ValueObject;
 }
 
+void UDelaunatorObject::FindPointsByValue(
+    TArray<int32>& OutPointIndices,
+    UDelaunatorCompareOperator* CompareOperator
+    )
+{
+    if (IsValid(CompareOperator))
+    {
+        CompareOperator->GetResults(OutPointIndices, GetPointCount());
+    }
+}
+
 // Query Utility
+
+void UDelaunatorObject::GetTrianglesByPointIndices(
+    TArray<int32>& OutTriangles,
+    const TArray<int32>& InPointIndices,
+    bool bInverseResult
+    )
+{
+    OutTriangles.Reset();
+
+    // Invalid delaunator object, abort
+    if (! IsValidDelaunatorObject())
+    {
+        return;
+    }
+
+    const TArray<FVector2D>& InPoints(GetPoints());
+    const TArray<int32>& InTriangles(GetTriangles());
+    const int32 TriangleCount = GetTriangleCount();
+
+    // Generate valid point index set
+    TSet<int32> PointIndexSet(InPointIndices.FilterByPredicate(
+        [&InPoints](const int32& PointIndex)
+        {
+            return InPoints.IsValidIndex(PointIndex);
+        } ) );
+
+    // No valid point index, abort
+    if (PointIndexSet.Num() < 1)
+    {
+        return;
+    }
+
+    // Gather all triangles that consist of any of the point indices
+    if (! bInverseResult)
+    {
+        for (int32 ti=0; ti<TriangleCount; ++ti)
+        {
+            int32 i = ti*3;
+
+            if (PointIndexSet.Contains(InTriangles[i  ]) ||
+                PointIndexSet.Contains(InTriangles[i+1]) ||
+                PointIndexSet.Contains(InTriangles[i+2]))
+            {
+                OutTriangles.Emplace(ti);
+            }
+        }
+    }
+    else
+    {
+        for (int32 ti=0; ti<TriangleCount; ++ti)
+        {
+            int32 i = ti*3;
+
+            if (PointIndexSet.Contains(InTriangles[i  ]) ||
+                PointIndexSet.Contains(InTriangles[i+1]) ||
+                PointIndexSet.Contains(InTriangles[i+2]))
+            {
+                continue;
+            }
+
+            OutTriangles.Emplace(ti);
+        }
+    }
+}
+
+void UDelaunatorObject::GetTrianglesByEdgeIndices(
+    TArray<int32>& OutTriangles,
+    const TArray<int32>& InPointIndices,
+    bool bInverseResult
+    )
+{
+    OutTriangles.Reset();
+
+    // Invalid delaunator object, abort
+    if (! IsValidDelaunatorObject())
+    {
+        return;
+    }
+
+    const TArray<FVector2D>& InPoints(GetPoints());
+    const TArray<int32>& InTriangles(GetTriangles());
+    const int32 TriangleCount = GetTriangleCount();
+
+    // Generate valid point index set
+    TSet<int32> PointIndexSet(InPointIndices.FilterByPredicate(
+        [&InPoints](const int32& PointIndex)
+        {
+            return InPoints.IsValidIndex(PointIndex);
+        } ) );
+
+    // No valid point index, abort
+    if (PointIndexSet.Num() < 1)
+    {
+        return;
+    }
+
+    // Gather all triangles that consist of any of the point indices
+    if (! bInverseResult)
+    {
+        for (int32 ti=0; ti<TriangleCount; ++ti)
+        {
+            int32 i = ti*3;
+            bool bInSet0 = PointIndexSet.Contains(InTriangles[i  ]);
+            bool bInSet1 = PointIndexSet.Contains(InTriangles[i+1]);
+            bool bInSet2 = PointIndexSet.Contains(InTriangles[i+2]);
+
+            if ((bInSet0 && bInSet1) ||
+                (bInSet0 && bInSet2) ||
+                (bInSet1 && bInSet2))
+            {
+                OutTriangles.Emplace(ti);
+            }
+        }
+    }
+    else
+    {
+        for (int32 ti=0; ti<TriangleCount; ++ti)
+        {
+            int32 i = ti*3;
+            bool bInSet0 = PointIndexSet.Contains(InTriangles[i  ]);
+            bool bInSet1 = PointIndexSet.Contains(InTriangles[i+1]);
+            bool bInSet2 = PointIndexSet.Contains(InTriangles[i+2]);
+
+            if ((bInSet0 && bInSet1) ||
+                (bInSet0 && bInSet2) ||
+                (bInSet1 && bInSet2))
+            {
+                continue;
+            }
+
+            OutTriangles.Emplace(ti);
+        }
+    }
+}
+
+// Boundary Utility
 
 void UDelaunatorObject::FindPointTriangles(
     TArray<int32>& OutTriangleIndices,
@@ -674,4 +827,17 @@ bool UDelaunatorObject::FindPolyGroupsBoundaryTriangles(
     OutTriangles = TSet<int32>(BoundaryTriangles).Array();
 
     return true;
+}
+
+void UDelaunatorObject::GetHullBoundaryTriangles(TArray<int32>& OutTriangles)
+{
+    if (! IsValidDelaunatorObject())
+    {
+        return;
+    }
+
+    TArray<int32> HullPointIndices;
+    GetHullPointIndices(HullPointIndices);
+
+    GetTrianglesByEdgeIndices(OutTriangles, HullPointIndices);
 }

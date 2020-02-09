@@ -101,6 +101,7 @@ public:
     TArray<FIndex> hull_next;
     TArray<FIndex> hull_tri;
     FIndex hull_start;
+    FIndex hull_size;
 
     INLINE Delaunator();
     INLINE Delaunator(const FReal* in_coords, FIndex in_coords_num);

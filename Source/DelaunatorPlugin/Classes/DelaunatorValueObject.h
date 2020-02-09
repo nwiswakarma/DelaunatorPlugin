@@ -32,48 +32,296 @@
 
 class UDelaunatorObject;
 
+UENUM(BlueprintType)
+enum class EDelaunatorValueType : uint8
+{
+    DELVT_Unknown,
+    DELVT_UInt8,
+    DELVT_Int32,
+    DELVT_Float,
+    DELVT_Max
+};
+
+template<typename InValueType>
+class TDelaunatorValueData
+{
+public:
+
+    typedef InValueType ValueType;
+
+    TArray<ValueType> Values;
+
+    FORCEINLINE ValueType& GetValue(int32 Index)
+    {
+        return Values[Index];
+    }
+
+    FORCEINLINE const ValueType& GetValue(int32 Index) const
+    {
+        return Values[Index];
+    }
+
+    //template<typename InDataType>
+	//FORCEINLINE typename TEnableIf<
+    //    TAreTypesEqual<ValueType, typename InDataType::ValueType>::Value
+    //    >::Type
+    //Compare(InDataType InValueData)
+	//{
+	//}
+
+    //template<typename InDataType>
+	//FORCEINLINE typename TEnableIf<
+    //    !TAreTypesEqual<ValueType, typename InDataType::ValueType>::Value
+    //    >::Type
+    //Compare(InDataType InValueData)
+	//{
+	//}
+
+    FORCEINLINE void SetValue(const ValueType& Value, int32 Index)
+    {
+        Values[Index] = Value;
+    }
+
+    FORCEINLINE void SetValues(int32 ValueCount)
+    {
+        Values.Reset(ValueCount);
+        Values.SetNumZeroed(ValueCount);
+    }
+
+    FORCEINLINE void SetUniformValue(const ValueType& InValue)
+    {
+        for (ValueType& Value : Values)
+        {
+            Value = InValue;
+        }
+    }
+
+    FORCEINLINE void SetPointValues(const TArray<int32>& InPointIndices, const ValueType& InValue)
+    {
+        for (int32 PointIndex : InPointIndices)
+        {
+            if (Values.IsValidIndex(PointIndex))
+            {
+                Values[PointIndex] = InValue;
+            }
+        }
+    }
+};
+
 UCLASS(BlueprintType, Abstract)
 class DELAUNATORPLUGIN_API UDelaunatorValueObject : public UObject
 {
     GENERATED_BODY()
+
+protected:
 
     UPROPERTY()
     TWeakObjectPtr<UDelaunatorObject> DelaunatorObject;
 
 public:
 
-    void SetOwner(UDelaunatorObject* InDelaunatorObject);
-    virtual void InitializePointValues();
-    virtual void InitializeTriangleValues();
+    UDelaunatorValueObject();
 
-    virtual void InitializeValues(int32 ValueCount)
+    FORCEINLINE bool HasValidOwner() const
+    {
+        return DelaunatorObject.IsValid();
+    }
+
+    void SetOwner(UDelaunatorObject* InDelaunatorObject);
+
+    void InitializePointValues();
+    void InitializeTriangleValues();
+
+    FORCEINLINE virtual void InitializeValues(int32 ValueCount)
     {
         // Blank Implementation
+    }
+
+    FORCEINLINE virtual bool IsValidElementCount(int32 InElementCount) const
+    {
+        return GetElementCount() == InElementCount;
+    }
+
+    FORCEINLINE virtual int32 GetElementCount() const
+    {
+        return -1;
+    }
+
+    FORCEINLINE virtual EDelaunatorValueType GetValueType() const
+    {
+        return EDelaunatorValueType::DELVT_Unknown;
+    }
+
+    FORCEINLINE virtual uint8 GetValueUInt8(int32 Index) const
+    {
+        return 0;
+    }
+
+    FORCEINLINE virtual int32 GetValueInt32(int32 Index) const
+    {
+        return 0;
+    }
+
+    FORCEINLINE virtual float GetValueFloat(int32 Index) const
+    {
+        return 0.f;
     }
 };
 
 UCLASS()
-class DELAUNATORPLUGIN_API UDelaunatorIntValueObject : public UDelaunatorValueObject
+class DELAUNATORPLUGIN_API UDelaunatorLiteralValueObject : public UDelaunatorValueObject
 {
     GENERATED_BODY()
 
 public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    TArray<int32> Values;
+    uint8 UInt8Value;
 
-    virtual void InitializeValues(int32 ValueCount) override;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 Int32Value;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    float FloatValue;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    EDelaunatorValueType ValueType;
+
+    FORCEINLINE virtual bool IsValidElementCount(int32 InElementCount) const override
+    {
+        return true;
+    }
+
+    FORCEINLINE virtual int32 GetElementCount() const override
+    {
+        return 1;
+    }
+
+    FORCEINLINE virtual EDelaunatorValueType GetValueType() const
+    {
+        return ValueType;
+    }
+
+    FORCEINLINE virtual uint8 GetValueUInt8(int32 Index) const
+    {
+        return UInt8Value;
+    }
+
+    FORCEINLINE virtual int32 GetValueInt32(int32 Index) const
+    {
+        return Int32Value;
+    }
+
+    FORCEINLINE virtual float GetValueFloat(int32 Index) const
+    {
+        return FloatValue;
+    }
 };
 
 UCLASS()
-class DELAUNATORPLUGIN_API UDelaunatorFloatValueObject : public UDelaunatorValueObject
+class DELAUNATORPLUGIN_API UDelaunatorIntValueObject : public UDelaunatorValueObject, public TDelaunatorValueData<int32>
 {
     GENERATED_BODY()
 
 public:
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    TArray<float> Values;
+    virtual void InitializeValues(int32 ValueCount) override;
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Uniform Value"))
+    void K2_SetUniformValue(int32 InValue);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Point Values"))
+    void K2_SetValuesByIndices(const TArray<int32>& InPointIndices, int32 InValue);
+
+    FORCEINLINE virtual int32 GetElementCount() const override
+    {
+        return Values.Num();
+    }
+
+    FORCEINLINE virtual EDelaunatorValueType GetValueType() const
+    {
+        return EDelaunatorValueType::DELVT_Int32;
+    }
+
+    FORCEINLINE virtual int32 GetValueInt32(int32 Index) const override
+    {
+        return Values.IsValidIndex(Index) ? Values[Index] : 0.f;
+    }
+};
+
+UCLASS()
+class DELAUNATORPLUGIN_API UDelaunatorFloatValueObject : public UDelaunatorValueObject, public TDelaunatorValueData<float>
+{
+    GENERATED_BODY()
+
+public:
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Uniform Value"))
+    void K2_SetUniformValue(float InValue);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Point Values"))
+    void K2_SetValuesByIndices(const TArray<int32>& InPointIndices, float InValue);
 
     virtual void InitializeValues(int32 ValueCount) override;
+
+    FORCEINLINE virtual int32 GetElementCount() const override
+    {
+        return Values.Num();
+    }
+
+    FORCEINLINE virtual EDelaunatorValueType GetValueType() const
+    {
+        return EDelaunatorValueType::DELVT_Float;
+    }
+
+    FORCEINLINE virtual float GetValueFloat(int32 Index) const override
+    {
+        return Values.IsValidIndex(Index) ? Values[Index] : 0.f;
+    }
 };
+
+// Int Value
+
+FORCEINLINE void UDelaunatorIntValueObject::InitializeValues(int32 ValueCount)
+{
+    check(HasValidOwner());
+    SetValues(ValueCount);
+}
+
+FORCEINLINE void UDelaunatorIntValueObject::K2_SetUniformValue(int32 InValue)
+{
+    if (HasValidOwner())
+    {
+        SetUniformValue(InValue);
+    }
+}
+
+FORCEINLINE void UDelaunatorIntValueObject::K2_SetValuesByIndices(const TArray<int32>& InPointIndices, int32 InValue)
+{
+    if (HasValidOwner())
+    {
+        SetPointValues(InPointIndices, InValue);
+    }
+}
+
+// Float Value
+
+FORCEINLINE void UDelaunatorFloatValueObject::InitializeValues(int32 ValueCount)
+{
+    check(HasValidOwner());
+    SetValues(ValueCount);
+}
+
+FORCEINLINE void UDelaunatorFloatValueObject::K2_SetUniformValue(float InValue)
+{
+    check(HasValidOwner());
+    SetUniformValue(InValue);
+}
+
+FORCEINLINE void UDelaunatorFloatValueObject::K2_SetValuesByIndices(const TArray<int32>& InPointIndices, float InValue)
+{
+    if (HasValidOwner())
+    {
+        SetPointValues(InPointIndices, InValue);
+    }
+}

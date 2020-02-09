@@ -29,6 +29,7 @@
 #include "CoreMinimal.h"
 #include "delaunator/delaunator.hpp"
 #include "DelaunatorValueObject.h"
+#include "DelaunatorCompareOperator.h"
 #include "GULTypes.h"
 #include "Geom/GULGeometryUtilityLibrary.h"
 #include "DelaunatorObject.generated.h"
@@ -42,10 +43,7 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
     delaunator::Delaunator Delaunator;
 
     UPROPERTY()
-    TMap<FName, UDelaunatorValueObject*> PointValueMap;
-
-    UPROPERTY()
-    TMap<FName, UDelaunatorValueObject*> TriangleValueMap;
+    TMap<FName, UDelaunatorValueObject*> ValueMap;
 
     static int32 GetNextTriCorner(int32 CornerIndex);
     static int32 GetNextTriCorner(int32 TriangleIndex, int32 PointIndex);
@@ -76,11 +74,19 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
         int32 PointIndex
         );
 
+    UDelaunatorValueObject* CreateDefaultValueObject(
+        UObject* Outer,
+        FName ValueName,
+        TSubclassOf<UDelaunatorValueObject> ValueType
+        );
+
 public:
 
     const TArray<FVector2D>& GetPoints() const;
     const TArray<int32>& GetTriangles() const;
     const TArray<int32>& GetHalfEdges() const;
+    void GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
+    void GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
 
     void FindPointTriangles(
         TArray<int32>& OutTriangleIndices,
@@ -117,14 +123,16 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangles As Int Vectors"))
     void K2_GetTrianglesAsIntVectors(TArray<FIntVector>& OutTriangles);
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Filtered Triangles"))
-    void K2_GetFilteredTriangles(TArray<int32>& OutTriangles, const TArray<int32>& FilterTriangles);
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Indices"))
+    void K2_GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles);
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
-    UDelaunatorValueObject* GetPointValueObject(FName ValueName);
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Indices (By Flat Indices)"))
+    void K2_GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles);
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
-    UDelaunatorValueObject* GetTriangleValueObject(FName ValueName);
+    // Value Generation
+
+    UFUNCTION(BlueprintPure, Category="Delaunator")
+    UDelaunatorValueObject* GetValueObject(FName ValueName);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     UDelaunatorValueObject* CreateDefaultPointValueObject(
@@ -140,14 +148,47 @@ public:
         TSubclassOf<UDelaunatorValueObject> ValueType
         );
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void FindPointsByValue(
+        TArray<int32>& OutPointIndices,
+        UDelaunatorCompareOperator* CompareOperator
+        );
+
+    // Triangles & Points Query
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void GetTrianglesByPointIndices(
+        TArray<int32>& OutTriangles,
+        const TArray<int32>& InPointIndices,
+        bool bInverseResult = false
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void GetTrianglesByEdgeIndices(
+        TArray<int32>& OutTriangles,
+        const TArray<int32>& InPointIndices,
+        bool bInverseResult = false
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void FilterUniquePointIndices(
+        TArray<int32>& OutPointIndices,
+        const TArray<int32>& InPointIndices
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void GetHullPointIndices(TArray<int32>& OutPointIndices);
+
+    // Boundary Utility
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     void FindTrianglesBetweenPoints(
         TArray<int32>& OutTriangleIndices,
         int32 PointIndex0,
         int32 PointIndex1
         );
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     bool FindBoundaryPoints(
         TArray<int32>& OutPointIndices,
         const TArray<int32>& InBoundaryTriangles,
@@ -155,19 +196,22 @@ public:
         int32 BoundaryPoint1
         );
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     bool FindPolyBoundaryTriangles(
         TArray<int32>& OutTriangles,
         const TArray<int32>& InPolyPointIndices,
         bool bClosedPoly
         );
 
-    UFUNCTION(BlueprintCallable)
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     bool FindPolyGroupsBoundaryTriangles(
         TArray<int32>& OutTriangles,
         const TArray<FGULIntGroup>& InPolyBoundaryGroups,
         bool bClosedPoly
         );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void GetHullBoundaryTriangles(TArray<int32>& OutTriangles);
 };
 
 FORCEINLINE bool UDelaunatorObject::IsValidDelaunatorObject() const
@@ -207,6 +251,48 @@ FORCEINLINE const TArray<int32>& UDelaunatorObject::GetHalfEdges() const
     return Delaunator.halfedges;
 }
 
+inline void UDelaunatorObject::GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const
+{
+    if (IsValidDelaunatorObject())
+    {
+        OutIndices.Reserve(OutIndices.Num()+InFilterTriangles.Num()*3);
+
+        const TArray<int32>& InTriangles(GetTriangles());
+
+        for (int32 ti : InFilterTriangles)
+        {
+            int32 i = ti*3;
+
+            if (InTriangles.IsValidIndex(i))
+            {
+                OutIndices.Emplace(InTriangles[i  ]);
+                OutIndices.Emplace(InTriangles[i+1]);
+                OutIndices.Emplace(InTriangles[i+2]);
+            }
+        }
+    }
+}
+
+inline void UDelaunatorObject::GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const
+{
+    if (IsValidDelaunatorObject())
+    {
+        OutIndices.Reserve(OutIndices.Num()+InFilterTriangles.Num()*3);
+
+        const TArray<int32>& InTriangles(GetTriangles());
+
+        for (int32 i : InFilterTriangles)
+        {
+            if (InTriangles.IsValidIndex(i))
+            {
+                OutIndices.Emplace(InTriangles[i  ]);
+                OutIndices.Emplace(InTriangles[i+1]);
+                OutIndices.Emplace(InTriangles[i+2]);
+            }
+        }
+    }
+}
+
 FORCEINLINE const TArray<FVector2D>& UDelaunatorObject::K2_GetPoints()
 {
     return GetPoints();
@@ -238,48 +324,54 @@ inline void UDelaunatorObject::K2_GetTrianglesAsIntVectors(TArray<FIntVector>& O
     }
 }
 
-inline void UDelaunatorObject::K2_GetFilteredTriangles(TArray<int32>& OutTriangles, const TArray<int32>& FilterTriangles)
+inline void UDelaunatorObject::K2_GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)
+{
+    OutIndices.Reset(InFilterTriangles.Num()*3);
+
+    GetTriangleIndices(OutIndices, InFilterTriangles);
+
+    OutIndices.Shrink();
+}
+
+inline void UDelaunatorObject::K2_GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)
+{
+    OutIndices.Reset(InFilterTriangles.Num()*3);
+
+    GetTriangleIndicesFlat(OutIndices, InFilterTriangles);
+
+    OutIndices.Shrink();
+}
+
+// Query Utility
+
+FORCEINLINE void UDelaunatorObject::FilterUniquePointIndices(
+    TArray<int32>& OutPointIndices,
+    const TArray<int32>& InPointIndices
+    )
+{
+    OutPointIndices = TSet<int32>(InPointIndices).Array();
+}
+
+inline void UDelaunatorObject::GetHullPointIndices(TArray<int32>& OutPointIndices)
 {
     if (IsValidDelaunatorObject())
     {
-        const TArray<int32>& InTriangles(GetTriangles());
-        bool bValidFilters = true;
+        OutPointIndices.Reset(Delaunator.hull_size);
 
-        OutTriangles.Reset(FilterTriangles.Num()*3);
-
-        for (int32 ti : FilterTriangles)
+        int32 e = Delaunator.hull_start;
+        do
         {
-            int32 i = ti*3;
-
-            if (! InTriangles.IsValidIndex(i))
-            {
-                bValidFilters = false;
-                break;
-            }
-
-            OutTriangles.Emplace(InTriangles[i  ]);
-            OutTriangles.Emplace(InTriangles[i+1]);
-            OutTriangles.Emplace(InTriangles[i+2]);
+            OutPointIndices.Emplace(e);
         }
-
-        if (! bValidFilters)
-        {
-            OutTriangles.Empty();
-        }
+        while ((e = Delaunator.hull_next[e]) != Delaunator.hull_start);
     }
 }
 
-FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetPointValueObject(FName ValueName)
-{
-    UDelaunatorValueObject** ValueObjectPtr = PointValueMap.Find(ValueName);
-    return ValueObjectPtr && IsValid(*ValueObjectPtr)
-        ? *ValueObjectPtr
-        : nullptr;
-}
+// Value Object Utility
 
-FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetTriangleValueObject(FName ValueName)
+FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetValueObject(FName ValueName)
 {
-    UDelaunatorValueObject** ValueObjectPtr = TriangleValueMap.Find(ValueName);
+    UDelaunatorValueObject** ValueObjectPtr = ValueMap.Find(ValueName);
     return ValueObjectPtr && IsValid(*ValueObjectPtr)
         ? *ValueObjectPtr
         : nullptr;

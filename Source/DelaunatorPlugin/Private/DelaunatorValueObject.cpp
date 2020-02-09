@@ -27,6 +27,13 @@
 
 #include "DelaunatorValueObject.h"
 
+// Base Value Object
+
+UDelaunatorValueObject::UDelaunatorValueObject()
+    : DelaunatorObject(nullptr)
+{
+}
+
 void UDelaunatorValueObject::SetOwner(UDelaunatorObject* InDelaunatorObject)
 {
     DelaunatorObject = InDelaunatorObject;
@@ -34,7 +41,7 @@ void UDelaunatorValueObject::SetOwner(UDelaunatorObject* InDelaunatorObject)
 
 void UDelaunatorValueObject::InitializePointValues()
 {
-    if (DelaunatorObject.IsValid())
+    if (HasValidOwner())
     {
         InitializeValues(DelaunatorObject->GetPointCount());
     }
@@ -42,20 +49,8 @@ void UDelaunatorValueObject::InitializePointValues()
 
 void UDelaunatorValueObject::InitializeTriangleValues()
 {
-    if (DelaunatorObject.IsValid())
+    if (HasValidOwner())
     {
         InitializeValues(DelaunatorObject->GetTriangleCount());
     }
-}
-
-void UDelaunatorIntValueObject::InitializeValues(int32 ValueCount)
-{
-    Values.Reset(ValueCount);
-    Values.SetNumZeroed(ValueCount);
-}
-
-void UDelaunatorFloatValueObject::InitializeValues(int32 ValueCount)
-{
-    Values.Reset(ValueCount);
-    Values.SetNumZeroed(ValueCount);
 }

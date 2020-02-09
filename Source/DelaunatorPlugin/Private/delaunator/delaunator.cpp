@@ -162,7 +162,7 @@ void Delaunator::update()
     // set up the seed triangle as the starting hull
 
     hull_start = i0;
-    FIndex hull_size = 3;
+    hull_size = 3;
 
     hull_next[i0] = hull_prev[i2] = i1;
     hull_next[i1] = hull_prev[i0] = i2;
