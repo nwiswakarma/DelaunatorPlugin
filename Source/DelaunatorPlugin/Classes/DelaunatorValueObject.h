@@ -100,10 +100,7 @@ public:
     {
         for (int32 PointIndex : InPointIndices)
         {
-            if (Values.IsValidIndex(PointIndex))
-            {
-                Values[PointIndex] = InValue;
-            }
+            Values[PointIndex] = InValue;
         }
     }
 };
@@ -166,6 +163,21 @@ public:
     {
         return 0.f;
     }
+
+    FORCEINLINE virtual void SetValueUInt8(int32 Index, uint8 InValue)
+    {
+        // Blank Implementation
+    }
+
+    FORCEINLINE virtual void SetValueInt32(int32 Index, int32 InValue)
+    {
+        // Blank Implementation
+    }
+
+    FORCEINLINE virtual void SetValueFloat(int32 Index, float InValue)
+    {
+        // Blank Implementation
+    }
 };
 
 UCLASS()
@@ -197,24 +209,39 @@ public:
         return 1;
     }
 
-    FORCEINLINE virtual EDelaunatorValueType GetValueType() const
+    FORCEINLINE virtual EDelaunatorValueType GetValueType() const override
     {
         return ValueType;
     }
 
-    FORCEINLINE virtual uint8 GetValueUInt8(int32 Index) const
+    FORCEINLINE virtual uint8 GetValueUInt8(int32 Index) const override
     {
         return UInt8Value;
     }
 
-    FORCEINLINE virtual int32 GetValueInt32(int32 Index) const
+    FORCEINLINE virtual int32 GetValueInt32(int32 Index) const override
     {
         return Int32Value;
     }
 
-    FORCEINLINE virtual float GetValueFloat(int32 Index) const
+    FORCEINLINE virtual float GetValueFloat(int32 Index) const override
     {
         return FloatValue;
+    }
+
+    FORCEINLINE virtual void SetValueUInt8(int32 Index, uint8 InValue) override
+    {
+        UInt8Value = InValue;
+    }
+
+    FORCEINLINE virtual void SetValueInt32(int32 Index, int32 InValue) override
+    {
+        Int32Value = InValue;
+    }
+
+    FORCEINLINE virtual void SetValueFloat(int32 Index, float InValue) override
+    {
+        FloatValue = InValue;
     }
 };
 
@@ -245,7 +272,12 @@ public:
 
     FORCEINLINE virtual int32 GetValueInt32(int32 Index) const override
     {
-        return Values.IsValidIndex(Index) ? Values[Index] : 0.f;
+        return Values[Index];
+    }
+
+    FORCEINLINE virtual void SetValueInt32(int32 Index, int32 InValue) override
+    {
+        Values[Index] = InValue;
     }
 };
 
@@ -276,7 +308,12 @@ public:
 
     FORCEINLINE virtual float GetValueFloat(int32 Index) const override
     {
-        return Values.IsValidIndex(Index) ? Values[Index] : 0.f;
+        return Values[Index];
+    }
+
+    FORCEINLINE virtual void SetValueFloat(int32 Index, float InValue) override
+    {
+        Values[Index] = InValue;
     }
 };
 

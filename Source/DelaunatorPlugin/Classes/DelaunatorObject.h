@@ -39,11 +39,16 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
 {
     GENERATED_BODY()
 
-    TArray<FVector2D> Points;
     delaunator::Delaunator Delaunator;
+
+    TArray<FVector2D> Points;
+    TBitArray<> BoundaryFlags;
 
     UPROPERTY()
     TMap<FName, UDelaunatorValueObject*> ValueMap;
+
+    UPROPERTY()
+    TMap<FName, FGULIntGroup> IndexGroupMap;
 
     static int32 GetNextTriCorner(int32 CornerIndex);
     static int32 GetNextTriCorner(int32 TriangleIndex, int32 PointIndex);
@@ -58,21 +63,28 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
         const FVector2D& SegmentPoint1
         );
 
-    int32 FindCornerIndex(int32 TriangleIndex, int32 PointIndex);
+    int32 FindCornerIndex(int32 TriangleIndex, int32 PointIndex) const;
+
+    void GetNeighbourTrianglePointIndex(
+        int32& OutNextIndex,
+        int32& OutPrevIndex,
+        int32 TriangleIndex,
+        int32 PointIndex
+        ) const;
 
     int32 FindSegmentClippingSide(
         const FVector2D& SegmentPoint0,
         const FVector2D& SegmentPoint1,
         int32 TriangleIndex,
         int32 PointIndex
-        );
+        ) const;
 
     bool HasOppositeSideSegmentIntersection(
         const FVector2D& SegmentPoint0,
         const FVector2D& SegmentPoint1,
         int32 TriangleIndex,
         int32 PointIndex
-        );
+        ) const;
 
     UDelaunatorValueObject* CreateDefaultValueObject(
         UObject* Outer,
@@ -80,18 +92,27 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
         TSubclassOf<UDelaunatorValueObject> ValueType
         );
 
+    void GetPointTrianglesBoundary(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const;
+    void GetPointTrianglesNonBoundary(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const;
+
+    void GetPointNeighboursBoundary(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const;
+    void GetPointNeighboursNonBoundary(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const;
+
 public:
 
     const TArray<FVector2D>& GetPoints() const;
     const TArray<int32>& GetTriangles() const;
     const TArray<int32>& GetHalfEdges() const;
+
     void GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
     void GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
 
-    void FindPointTriangles(
-        TArray<int32>& OutTriangleIndices,
-        int32 InTrianglePointIndex
-        );
+    int32 GetTrianglePointIndex(int32 InPointIndex) const;
+    void GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const;
+    void GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const;
+
+    //void PointFillVisit(const TArray<int32>& InitialPoints);
+    void GeneratePointsDepthValues(UDelaunatorValueObject* ValueObject, const TArray<int32>& InitialPoints) const;
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     bool IsValidDelaunatorObject() const;
@@ -154,6 +175,12 @@ public:
         UDelaunatorCompareOperator* CompareOperator
         );
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Points Depth Values"))
+    void K2_GeneratePointsDepthValues(
+        UDelaunatorValueObject* ValueObject,
+        const TArray<int32>& InitialPoints
+        );
+
     // Triangles & Points Query
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
@@ -178,6 +205,15 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     void GetHullPointIndices(TArray<int32>& OutPointIndices);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Point Triangles"))
+    void K2_GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Point Neighbours"))
+    void K2_GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Point Index (Single)"))
+    int32 K2_GetTrianglePointIndex(int32 InPointIndex) const;
 
     // Boundary Utility
 
@@ -293,6 +329,146 @@ inline void UDelaunatorObject::GetTriangleIndicesFlat(TArray<int32>& OutIndices,
     }
 }
 
+FORCEINLINE int32 UDelaunatorObject::GetTrianglePointIndex(int32 InPointIndex) const
+{
+    if (IsValidDelaunatorObject() && Points.IsValidIndex(InPointIndex))
+    {
+        int32 TrianglePointIndex = -1;
+        return GetTriangles().Find(InPointIndex, TrianglePointIndex)
+            ? TrianglePointIndex
+            : -1;
+    }
+
+    return -1;
+}
+
+inline void UDelaunatorObject::GetPointTrianglesNonBoundary(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const
+{
+    const TArray<int32>& InTriangles(GetTriangles());
+    const TArray<int32>& InHalfEdges(GetHalfEdges());
+
+    check(IsValidDelaunatorObject());
+    check(InTriangles.IsValidIndex(InTrianglePointIndex));
+
+    int32 InitialTriangleIndex = InTrianglePointIndex/3;
+
+    // Add initial triangle
+    OutTriangleIndices.Emplace(InitialTriangleIndex);
+
+    // Start from initial point index and iterate CCW
+
+    int32 HalfEdge = InHalfEdges[InTrianglePointIndex];
+
+    while (HalfEdge >= 0)
+    {
+        int32 TriangleIndex = HalfEdge/3;
+        int32 PointIndex = GetNextTriCorner(TriangleIndex, HalfEdge);
+
+        // All point triangles visited, break
+        if (PointIndex == InTrianglePointIndex)
+        {
+            break;
+        }
+
+        // Add next triangle
+        OutTriangleIndices.Emplace(TriangleIndex);
+
+        // Get corner of next triangle
+        HalfEdge = InHalfEdges[PointIndex];
+    }
+
+    // Ensure boundary edge is not visited
+    check(HalfEdge >= 0);
+}
+
+inline void UDelaunatorObject::GetPointNeighboursNonBoundary(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const
+{
+    const TArray<int32>& InTriangles(GetTriangles());
+    const TArray<int32>& InHalfEdges(GetHalfEdges());
+
+    check(IsValidDelaunatorObject());
+    check(InTriangles.IsValidIndex(InTrianglePointIndex));
+
+    int32 InitialTriangleIndex = InTrianglePointIndex/3;
+
+    // Add initial triangle point next neighbour
+
+    OutNeighbourIndices.Emplace(
+        InTriangles[GetNextTriCorner(InitialTriangleIndex, InTrianglePointIndex)]
+        );
+
+    // Start from initial point index and iterate CCW
+
+    int32 HalfEdge = InHalfEdges[InTrianglePointIndex];
+
+    while (HalfEdge >= 0)
+    {
+        int32 TriangleIndex = HalfEdge/3;
+        int32 PointIndex = GetNextTriCorner(TriangleIndex, HalfEdge);
+
+        // All point triangles visited, break
+        if (PointIndex == InTrianglePointIndex)
+        {
+            break;
+        }
+
+        // Add neighbour point
+        OutNeighbourIndices.Emplace(
+            InTriangles[GetNextTriCorner(TriangleIndex, PointIndex)]
+            );
+
+        // Get corner of next triangle
+        HalfEdge = InHalfEdges[PointIndex];
+    }
+
+    // Ensure boundary edge is not visited
+    check(HalfEdge >= 0);
+}
+
+FORCEINLINE void UDelaunatorObject::GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const
+{
+    if (! IsValidDelaunatorObject() ||
+        ! GetTriangles().IsValidIndex(InTrianglePointIndex))
+    {
+        return;
+    }
+
+    int32 PointIndex = GetTriangles()[InTrianglePointIndex];
+
+    check(GetTriangles().IsValidIndex(PointIndex));
+
+    if (BoundaryFlags[PointIndex])
+    {
+        GetPointTrianglesBoundary(OutTriangleIndices, InTrianglePointIndex);
+    }
+    else
+    {
+        GetPointTrianglesNonBoundary(OutTriangleIndices, InTrianglePointIndex);
+    }
+}
+
+FORCEINLINE void UDelaunatorObject::GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const
+{
+    if (! IsValidDelaunatorObject() ||
+        ! GetTriangles().IsValidIndex(InTrianglePointIndex))
+    {
+        return;
+    }
+
+    int32 PointIndex = GetTriangles()[InTrianglePointIndex];
+
+    check(GetTriangles().IsValidIndex(PointIndex));
+
+    if (BoundaryFlags[PointIndex])
+    {
+        GetPointNeighboursBoundary(OutNeighbourIndices, InTrianglePointIndex);
+    }
+    else
+    {
+        GetPointNeighboursNonBoundary(OutNeighbourIndices, InTrianglePointIndex);
+    }
+}
+
 FORCEINLINE const TArray<FVector2D>& UDelaunatorObject::K2_GetPoints()
 {
     return GetPoints();
@@ -324,24 +500,6 @@ inline void UDelaunatorObject::K2_GetTrianglesAsIntVectors(TArray<FIntVector>& O
     }
 }
 
-inline void UDelaunatorObject::K2_GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)
-{
-    OutIndices.Reset(InFilterTriangles.Num()*3);
-
-    GetTriangleIndices(OutIndices, InFilterTriangles);
-
-    OutIndices.Shrink();
-}
-
-inline void UDelaunatorObject::K2_GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)
-{
-    OutIndices.Reset(InFilterTriangles.Num()*3);
-
-    GetTriangleIndicesFlat(OutIndices, InFilterTriangles);
-
-    OutIndices.Shrink();
-}
-
 // Query Utility
 
 FORCEINLINE void UDelaunatorObject::FilterUniquePointIndices(
@@ -367,6 +525,41 @@ inline void UDelaunatorObject::GetHullPointIndices(TArray<int32>& OutPointIndice
     }
 }
 
+FORCEINLINE void UDelaunatorObject::K2_GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex)
+{
+    OutTriangleIndices.Reset();
+    GetPointTriangles(OutTriangleIndices, InTrianglePointIndex);
+}
+
+FORCEINLINE void UDelaunatorObject::K2_GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex)
+{
+    OutNeighbourIndices.Reset();
+    GetPointNeighbours(OutNeighbourIndices, InTrianglePointIndex);
+}
+
+FORCEINLINE int32 UDelaunatorObject::K2_GetTrianglePointIndex(int32 InPointIndex) const
+{
+    return GetTrianglePointIndex(InPointIndex);
+}
+
+inline void UDelaunatorObject::K2_GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)
+{
+    OutIndices.Reset(InFilterTriangles.Num()*3);
+
+    GetTriangleIndices(OutIndices, InFilterTriangles);
+
+    OutIndices.Shrink();
+}
+
+inline void UDelaunatorObject::K2_GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)
+{
+    OutIndices.Reset(InFilterTriangles.Num()*3);
+
+    GetTriangleIndicesFlat(OutIndices, InFilterTriangles);
+
+    OutIndices.Shrink();
+}
+
 // Value Object Utility
 
 FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetValueObject(FName ValueName)
@@ -375,6 +568,14 @@ FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetValueObject(FName Valu
     return ValueObjectPtr && IsValid(*ValueObjectPtr)
         ? *ValueObjectPtr
         : nullptr;
+}
+
+FORCEINLINE void UDelaunatorObject::K2_GeneratePointsDepthValues(
+    UDelaunatorValueObject* ValueObject,
+    const TArray<int32>& InitialPoints
+    )
+{
+    GeneratePointsDepthValues(ValueObject, InitialPoints);
 }
 
 // Internal Utility
@@ -386,8 +587,8 @@ FORCEINLINE int32 UDelaunatorObject::GetNextTriCorner(int32 CornerIndex)
 
 FORCEINLINE int32 UDelaunatorObject::GetNextTriCorner(int32 TriangleIndex, int32 PointIndex)
 {
-    int32 FlatIndex = TriangleIndex*3;
-    return FlatIndex+GetNextTriCorner(PointIndex-FlatIndex);
+    int32 FlatTriIndex = TriangleIndex*3;
+    return FlatTriIndex+GetNextTriCorner(PointIndex-FlatTriIndex);
 }
 
 FORCEINLINE int32 UDelaunatorObject::GetPrevTriCorner(int32 CornerIndex)
@@ -397,8 +598,8 @@ FORCEINLINE int32 UDelaunatorObject::GetPrevTriCorner(int32 CornerIndex)
 
 FORCEINLINE int32 UDelaunatorObject::GetPrevTriCorner(int32 TriangleIndex, int32 PointIndex)
 {
-    int32 FlatIndex = TriangleIndex*3;
-    return FlatIndex+GetPrevTriCorner(PointIndex-FlatIndex);
+    int32 FlatTriIndex = TriangleIndex*3;
+    return FlatTriIndex+GetPrevTriCorner(PointIndex-FlatTriIndex);
 }
 
 FORCEINLINE bool UDelaunatorObject::HasSegmentIntersection(
@@ -416,7 +617,7 @@ FORCEINLINE bool UDelaunatorObject::HasSegmentIntersection(
         );
 }
 
-FORCEINLINE int32 UDelaunatorObject::FindCornerIndex(int32 TriangleIndex, int32 PointIndex)
+FORCEINLINE int32 UDelaunatorObject::FindCornerIndex(int32 TriangleIndex, int32 PointIndex) const
 {
     const TArray<int32>& InTriangles(GetTriangles());
 
@@ -431,12 +632,19 @@ FORCEINLINE int32 UDelaunatorObject::FindCornerIndex(int32 TriangleIndex, int32 
     return -1;
 }
 
+FORCEINLINE void UDelaunatorObject::GetNeighbourTrianglePointIndex(int32& OutNextIndex, int32& OutPrevIndex, int32 TriangleIndex, int32 PointIndex) const
+{
+    int32 CornerIndex = FindCornerIndex(TriangleIndex, PointIndex);
+    OutNextIndex = GetNextTriCorner(TriangleIndex, CornerIndex);
+    OutPrevIndex = GetPrevTriCorner(TriangleIndex, CornerIndex);
+}
+
 inline int32 UDelaunatorObject::FindSegmentClippingSide(
     const FVector2D& SegmentPoint0,
     const FVector2D& SegmentPoint1,
     int32 TriangleIndex,
     int32 PointIndex
-    )
+    ) const
 {
     const TArray<FVector2D>& InPoints(GetPoints());
     const TArray<int32>& InTriangles(GetTriangles());
@@ -466,7 +674,7 @@ FORCEINLINE bool UDelaunatorObject::HasOppositeSideSegmentIntersection(
     const FVector2D& SegmentPoint1,
     int32 TriangleIndex,
     int32 PointIndex
-    )
+    ) const
 {
     const TArray<FVector2D>& InPoints(GetPoints());
     const TArray<int32>& InTriangles(GetTriangles());
