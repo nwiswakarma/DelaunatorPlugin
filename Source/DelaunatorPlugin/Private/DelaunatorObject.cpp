@@ -125,6 +125,17 @@ void UDelaunatorObject::FindPointsByValue(
     }
 }
 
+void UDelaunatorObject::FindTrianglesByValue(
+    TArray<int32>& OutTriangleIndices,
+    UDelaunatorCompareOperator* CompareOperator
+    )
+{
+    if (IsValid(CompareOperator))
+    {
+        CompareOperator->GetResults(OutTriangleIndices, GetTriangleCount());
+    }
+}
+
 // Query Utility
 
 void UDelaunatorObject::GetTrianglesByPointIndices(
@@ -433,27 +444,7 @@ void UDelaunatorObject::FindTrianglesBetweenPoints(
     // Find initial triangle
 
     const int32 TriCount = InTriangles.Num() / 3;
-    int32 InitialTrianglePoint = -1;
-
-    for (int32 ti=0; ti<TriCount; ++ti)
-    {
-        int32 pi = ti*3;
-        int32 piN = pi+3;
-
-        for (; pi<piN; ++pi)
-        {
-            if (InTriangles[pi] == PointIndex0)
-            {
-                InitialTrianglePoint = pi;
-                break;
-            }
-        }
-
-        if (InitialTrianglePoint >= 0)
-        {
-            break;
-        }
-    }
+    int32 InitialTrianglePoint = GetTrianglePointIndex(PointIndex0);
 
     // No valid triangle found, abort
     if (InitialTrianglePoint < 0)
@@ -662,7 +653,8 @@ bool UDelaunatorObject::FindBoundaryPoints(
 bool UDelaunatorObject::FindPolyBoundaryTriangles(
     TArray<int32>& OutTriangles,
     const TArray<int32>& InPolyPointIndices,
-    bool bClosedPoly
+    bool bClosedPoly,
+    bool bAllowDirectConnection
     )
 {
     OutTriangles.Reset();
@@ -722,7 +714,7 @@ bool UDelaunatorObject::FindPolyBoundaryTriangles(
             );
 
         // Poly line have direct connection within single triangle, skip
-        if (TrianglesBetweenPoints.Num() == 1)
+        if (!bAllowDirectConnection && TrianglesBetweenPoints.Num() == 1)
         {
             continue;
         }
@@ -777,7 +769,8 @@ bool UDelaunatorObject::FindPolyBoundaryTriangles(
 bool UDelaunatorObject::FindPolyGroupsBoundaryTriangles(
     TArray<int32>& OutTriangles,
     const TArray<FGULIntGroup>& InPolyBoundaryGroups,
-    bool bClosedPoly
+    bool bClosedPoly,
+    bool bAllowDirectConnection
     )
 {
     OutTriangles.Reset();
@@ -845,7 +838,7 @@ bool UDelaunatorObject::FindPolyGroupsBoundaryTriangles(
                 );
 
             // Poly line have direct connection within single triangle, skip
-            if (TrianglesBetweenPoints.Num() == 1)
+            if (!bAllowDirectConnection && TrianglesBetweenPoints.Num() == 1)
             {
                 continue;
             }
@@ -921,26 +914,22 @@ bool UDelaunatorObject::FindPolyGroupsBoundaryTriangles(
     return true;
 }
 
-void UDelaunatorObject::GetHullBoundaryTriangles(TArray<int32>& OutTriangles)
-{
-    if (! IsValidDelaunatorObject())
-    {
-        return;
-    }
-
-    TArray<int32> HullPointIndices;
-    GetHullPointIndices(HullPointIndices);
-
-    GetTrianglesByEdgeIndices(OutTriangles, HullPointIndices);
-}
-
-void UDelaunatorObject::GeneratePointsDepthValues(UDelaunatorValueObject* ValueObject, const TArray<int32>& InitialPoints) const
+void UDelaunatorObject::GeneratePointsDepthValues(
+    UDelaunatorValueObject* ValueObject,
+    const TArray<int32>& InitialPoints,
+    FDelaunatorCompareCallback CompareCallback
+    ) const
 {
     if (! IsValidDelaunatorObject() ||
         ! IsValid(ValueObject)   ||
         ! ValueObject->IsValidElementCount(GetPointCount()))
     {
         return;
+    }
+
+    if (! CompareCallback)
+    {
+        CompareCallback = [](int32 Index){ return true; };
     }
 
     const TArray<int32>& InTriangles(GetTriangles());
@@ -954,7 +943,7 @@ void UDelaunatorObject::GeneratePointsDepthValues(UDelaunatorValueObject* ValueO
     {
         int32 TriPointIndex = GetTrianglePointIndex(i);
 
-        if (TriPointIndex >= 0)
+        if (TriPointIndex >= 0 && CompareCallback(i))
         {
             VisitedSet[i] = true;
             VisitQueue.Enqueue(TriPointIndex);
@@ -1002,6 +991,77 @@ void UDelaunatorObject::GeneratePointsDepthValues(UDelaunatorValueObject* ValueO
                 VisitedSet[PrevPointIndex] = true;
                 VisitQueue.Enqueue(PrevTPI);
                 ValueObject->SetValueInt32(PrevPointIndex, Depth+1);
+            }
+        }
+    }
+}
+
+void UDelaunatorObject::GenerateTrianglesDepthValues(
+    UDelaunatorValueObject* ValueObject,
+    const TArray<int32>& InitialPoints,
+    FDelaunatorCompareCallback CompareCallback
+    ) const
+{
+    if (! IsValidDelaunatorObject() ||
+        ! IsValid(ValueObject)   ||
+        ! ValueObject->IsValidElementCount(GetTriangleCount()))
+    {
+        return;
+    }
+
+    const TArray<int32>& InTriangles(GetTriangles());
+    const TArray<int32>& InHalfEdges(GetHalfEdges());
+
+    const int32 TriangleCount = GetTriangleCount();
+
+    TQueue<int32> VisitQueue;
+    TBitArray<> VisitedSet;
+    TArray<int32> PointTriangles;
+
+    VisitedSet.Init(false, GetTriangleCount());
+
+    for (int32 i : InitialPoints)
+    {
+        int32 TriPointIndex = GetTrianglePointIndex(i);
+
+        // Invalid input point index, skip
+        if (TriPointIndex < 0)
+        {
+            continue;
+        }
+
+        GetPointTriangles(PointTriangles, TriPointIndex);
+
+        for (int32 ti : PointTriangles)
+        {
+            if (! VisitedSet[ti])
+            {
+                VisitedSet[ti] = true;
+                VisitQueue.Enqueue(ti);
+                ValueObject->SetValueInt32(ti, 0);
+            }
+        }
+    }
+
+    while (! VisitQueue.IsEmpty())
+    {
+        int32 TriangleIndex;
+        VisitQueue.Dequeue(TriangleIndex);
+
+        int32 Depth = ValueObject->GetValueInt32(TriangleIndex);
+        int32 FlatIndex = TriangleIndex*3;
+
+        for (int32 i=0; i<3; ++i)
+        {
+            int32 Corner = FlatIndex+i;
+            int32 HalfEdge = InHalfEdges[Corner];
+            int32 Triangle = HalfEdge/3;
+
+            if (HalfEdge >= 0 && ! VisitedSet[Triangle])
+            {
+                VisitedSet[Triangle] = true;
+                VisitQueue.Enqueue(Triangle);
+                ValueObject->SetValueInt32(Triangle, Depth+1);
             }
         }
     }

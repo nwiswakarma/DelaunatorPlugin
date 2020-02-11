@@ -185,7 +185,7 @@ bool UDelaunatorCompareOperatorUnary::InitializeOperator(int32 ElementCount)
             case EDelaunatorUnaryCompareOperation::DELUCO_Not:
                 Operator = [LogicOperator](int32 Index)
                 {
-                    return ! LogicOperator->Operator(Index);
+                    return ! LogicOperator->Compare(Index);
                 };
                 break;
         }
@@ -479,32 +479,32 @@ bool UDelaunatorCompareOperatorBinary::InitializeOperator(int32 ElementCount)
             case ECompOp::DELBCO_Equal:
                 Operator = [lo0, lo1](int32 Index)
                 {
-                    return lo0->Operator(Index)
-                        == lo1->Operator(Index);
+                    return lo0->Compare(Index)
+                        == lo1->Compare(Index);
                 };
                 break;
 
             case ECompOp::DELBCO_NotEqual:
                 Operator = [lo0, lo1](int32 Index)
                 {
-                    return lo0->Operator(Index)
-                        != lo1->Operator(Index);
+                    return lo0->Compare(Index)
+                        != lo1->Compare(Index);
                 };
                 break;
 
             case ECompOp::DELBCO_And:
                 Operator = [lo0, lo1](int32 Index)
                 {
-                    return lo0->Operator(Index)
-                        && lo1->Operator(Index);
+                    return lo0->Compare(Index)
+                        && lo1->Compare(Index);
                 };
                 break;
 
             case ECompOp::DELBCO_Or:
                 Operator = [lo0, lo1](int32 Index)
                 {
-                    return lo0->Operator(Index)
-                        || lo1->Operator(Index);
+                    return lo0->Compare(Index)
+                        || lo1->Compare(Index);
                 };
                 break;
         }

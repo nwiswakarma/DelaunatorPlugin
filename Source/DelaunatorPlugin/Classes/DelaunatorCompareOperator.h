@@ -33,6 +33,8 @@
 
 class UDelaunatorObject;
 
+typedef TFunction<bool(int32)> FDelaunatorCompareCallback;
+
 UENUM(BlueprintType)
 enum class EDelaunatorUnaryCompareOperation : uint8
 {
@@ -77,16 +79,6 @@ public:
         return false;
     }
 
-    FORCEINLINE virtual bool CompareValue(int32 Index) const
-    {
-        return false;
-    }
-
-    FORCEINLINE virtual bool CompareValue(UDelaunatorCompareOperator* Other, int32 Index) const
-    {
-        return false;
-    }
-
     void GetResults(TArray<int32>& OutPointIndices, int32 ElementCount);
 };
 
@@ -110,11 +102,21 @@ class DELAUNATORPLUGIN_API UDelaunatorCompareOperatorLogic : public UDelaunatorC
 
 protected:
 
+    FDelaunatorCompareCallback Operator;
+
     virtual void GetResultsImpl(TArray<int32>& OutPointIndices, int32 ElementCount) override;
 
 public:
 
-    TFunction<bool(int32)> Operator;
+    FORCEINLINE bool Compare(int32 Index) const
+    {
+        return Operator(Index);
+    }
+
+    FORCEINLINE const FDelaunatorCompareCallback& GetOperator() const
+    {
+        return Operator;
+    }
 };
 
 UCLASS()

@@ -111,8 +111,23 @@ public:
     void GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const;
     void GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const;
 
+    void GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles) const;
+
+    void GetTriangleCircumcenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles) const;
+
     //void PointFillVisit(const TArray<int32>& InitialPoints);
-    void GeneratePointsDepthValues(UDelaunatorValueObject* ValueObject, const TArray<int32>& InitialPoints) const;
+
+    void GeneratePointsDepthValues(
+        UDelaunatorValueObject* ValueObject,
+        const TArray<int32>& InitialPoints,
+        FDelaunatorCompareCallback CompareCallback = nullptr
+        ) const;
+
+    void GenerateTrianglesDepthValues(
+        UDelaunatorValueObject* ValueObject,
+        const TArray<int32>& InitialPoints,
+        FDelaunatorCompareCallback CompareCallback = nullptr
+        ) const;
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     bool IsValidDelaunatorObject() const;
@@ -175,10 +190,24 @@ public:
         UDelaunatorCompareOperator* CompareOperator
         );
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void FindTrianglesByValue(
+        TArray<int32>& OutTriangleIndices,
+        UDelaunatorCompareOperator* CompareOperator
+        );
+
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Points Depth Values"))
     void K2_GeneratePointsDepthValues(
         UDelaunatorValueObject* ValueObject,
-        const TArray<int32>& InitialPoints
+        const TArray<int32>& InitialPoints,
+        UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Triangles Depth Values"))
+    void K2_GenerateTrianglesDepthValues(
+        UDelaunatorValueObject* ValueObject,
+        const TArray<int32>& InitialPoints,
+        UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
         );
 
     // Triangles & Points Query
@@ -206,11 +235,20 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     void GetHullPointIndices(TArray<int32>& OutPointIndices);
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void GetHullBoundaryTriangles(TArray<int32>& OutTriangles);
+
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Point Triangles"))
     void K2_GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Point Neighbours"))
     void K2_GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Centers"))
+    void K2_GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Circumcenters"))
+    void K2_GetTriangleCircumcenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Point Index (Single)"))
     int32 K2_GetTrianglePointIndex(int32 InPointIndex) const;
@@ -236,18 +274,17 @@ public:
     bool FindPolyBoundaryTriangles(
         TArray<int32>& OutTriangles,
         const TArray<int32>& InPolyPointIndices,
-        bool bClosedPoly
+        bool bClosedPoly = false,
+        bool bAllowDirectConnection = false
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     bool FindPolyGroupsBoundaryTriangles(
         TArray<int32>& OutTriangles,
         const TArray<FGULIntGroup>& InPolyBoundaryGroups,
-        bool bClosedPoly
+        bool bClosedPoly = false,
+        bool bAllowDirectConnection = false
         );
-
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
-    void GetHullBoundaryTriangles(TArray<int32>& OutTriangles);
 };
 
 FORCEINLINE bool UDelaunatorObject::IsValidDelaunatorObject() const
@@ -469,6 +506,67 @@ FORCEINLINE void UDelaunatorObject::GetPointNeighbours(TArray<int32>& OutNeighbo
     }
 }
 
+inline void UDelaunatorObject::GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles) const
+{
+    if (! IsValidDelaunatorObject())
+    {
+        return;
+    }
+
+    const TArray<int32>& InTriangles(GetTriangles());
+
+    OutTriangleCenters.Reserve(InTriangles.Num());
+
+    for (int32 ti : InTargetTriangles)
+    {
+        int32 i = ti*3;
+
+        if (InTriangles.IsValidIndex(i))
+        {
+            const FVector2D& P0(Points[InTriangles[i  ]]);
+            const FVector2D& P1(Points[InTriangles[i+1]]);
+            const FVector2D& P2(Points[InTriangles[i+2]]);
+            OutTriangleCenters.Emplace((P0+P1+P2)/3.f);
+        }
+    }
+}
+
+inline void UDelaunatorObject::GetTriangleCircumcenters(TArray<FVector2D>& OutTriangleCircumcenters, const TArray<int32>& InTargetTriangles) const
+{
+    if (! IsValidDelaunatorObject())
+    {
+        return;
+    }
+
+    const TArray<int32>& InTriangles(GetTriangles());
+
+    OutTriangleCircumcenters.Reserve(InTriangles.Num());
+
+    for (int32 ti : InTargetTriangles)
+    {
+        int32 i = ti*3;
+
+        if (InTriangles.IsValidIndex(i))
+        {
+            const FVector2D& P0(Points[InTriangles[i  ]]);
+            const FVector2D& P1(Points[InTriangles[i+1]]);
+            const FVector2D& P2(Points[InTriangles[i+2]]);
+
+            const FVector2D P01 = P1 - P0;
+            const FVector2D P02 = P2 - P0;
+
+            const float bl = P01.SizeSquared();
+            const float cl = P02.SizeSquared();
+            const float d = P01.X * P02.Y - P01.Y * P02.X;
+
+            const float x = P0.X + (P02.Y * bl - P01.Y * cl) * .5f / d;
+            const float y = P0.Y + (P01.X * cl - P02.X * bl) * .5f / d;
+
+            OutTriangleCircumcenters.Emplace(x, y);
+        }
+    }
+}
+
 FORCEINLINE const TArray<FVector2D>& UDelaunatorObject::K2_GetPoints()
 {
     return GetPoints();
@@ -525,6 +623,19 @@ inline void UDelaunatorObject::GetHullPointIndices(TArray<int32>& OutPointIndice
     }
 }
 
+inline void UDelaunatorObject::GetHullBoundaryTriangles(TArray<int32>& OutTriangles)
+{
+    if (! IsValidDelaunatorObject())
+    {
+        return;
+    }
+
+    TArray<int32> HullPointIndices;
+    GetHullPointIndices(HullPointIndices);
+
+    GetTrianglesByEdgeIndices(OutTriangles, HullPointIndices);
+}
+
 FORCEINLINE void UDelaunatorObject::K2_GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex)
 {
     OutTriangleIndices.Reset();
@@ -535,6 +646,18 @@ FORCEINLINE void UDelaunatorObject::K2_GetPointNeighbours(TArray<int32>& OutNeig
 {
     OutNeighbourIndices.Reset();
     GetPointNeighbours(OutNeighbourIndices, InTrianglePointIndex);
+}
+
+FORCEINLINE void UDelaunatorObject::K2_GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles)
+{
+    OutTriangleCenters.Reset();
+    GetTriangleCenters(OutTriangleCenters, InTargetTriangles);
+}
+
+FORCEINLINE void UDelaunatorObject::K2_GetTriangleCircumcenters(TArray<FVector2D>& OutTriangleCircumcenters, const TArray<int32>& InTargetTriangles)
+{
+    OutTriangleCircumcenters.Reset();
+    GetTriangleCircumcenters(OutTriangleCircumcenters, InTargetTriangles);
 }
 
 FORCEINLINE int32 UDelaunatorObject::K2_GetTrianglePointIndex(int32 InPointIndex) const
@@ -572,10 +695,34 @@ FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetValueObject(FName Valu
 
 FORCEINLINE void UDelaunatorObject::K2_GeneratePointsDepthValues(
     UDelaunatorValueObject* ValueObject,
-    const TArray<int32>& InitialPoints
+    const TArray<int32>& InitialPoints,
+    UDelaunatorCompareOperatorLogic* CompareOperator
     )
 {
-    GeneratePointsDepthValues(ValueObject, InitialPoints);
+    FDelaunatorCompareCallback CompareCallback(nullptr);
+
+    if (IsValid(CompareOperator))
+    {
+        CompareCallback = CompareOperator->GetOperator();
+    }
+
+    GeneratePointsDepthValues(ValueObject, InitialPoints, CompareCallback);
+}
+
+FORCEINLINE void UDelaunatorObject::K2_GenerateTrianglesDepthValues(
+    UDelaunatorValueObject* ValueObject,
+    const TArray<int32>& InitialPoints,
+    UDelaunatorCompareOperatorLogic* CompareOperator
+    )
+{
+    FDelaunatorCompareCallback CompareCallback(nullptr);
+
+    if (IsValid(CompareOperator))
+    {
+        CompareCallback = CompareOperator->GetOperator();
+    }
+
+    GenerateTrianglesDepthValues(ValueObject, InitialPoints, CompareCallback);
 }
 
 // Internal Utility

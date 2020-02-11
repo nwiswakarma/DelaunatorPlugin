@@ -61,22 +61,6 @@ public:
         return Values[Index];
     }
 
-    //template<typename InDataType>
-	//FORCEINLINE typename TEnableIf<
-    //    TAreTypesEqual<ValueType, typename InDataType::ValueType>::Value
-    //    >::Type
-    //Compare(InDataType InValueData)
-	//{
-	//}
-
-    //template<typename InDataType>
-	//FORCEINLINE typename TEnableIf<
-    //    !TAreTypesEqual<ValueType, typename InDataType::ValueType>::Value
-    //    >::Type
-    //Compare(InDataType InValueData)
-	//{
-	//}
-
     FORCEINLINE void SetValue(const ValueType& Value, int32 Index)
     {
         Values[Index] = Value;
