@@ -299,17 +299,17 @@ void UDelaunatorVoronoi::FindSegmentIntersectCells(
     TArray<FVector2D> CellPoints;
     TArray<int32> NeighbourCells;
 
-    //float DistSq = BIG_NUMBER;
     int32 PrevIndex = -1;
     int32 NextIndex = CellIndex;
 
     enum { SEARCH_LIMIT = 1000 };
 
-    //while (true)
     for (int32 It=0; It<SEARCH_LIMIT; ++It)
     {
         CellPoints.Reset();
         NeighbourCells.Reset();
+
+        // Get cell half-edge segments and corresponding neighbours
 
         GetCellPoints(CellPoints, NeighbourCells, NextIndex);
 
@@ -320,40 +320,25 @@ void UDelaunatorVoronoi::FindSegmentIntersectCells(
 
         check(CellPoints.Num() == NeighbourCells.Num());
 
+        // Find cell segments intersection towards target point
+
         FVector2D P0;
         FVector2D P1 = CellPoints.Last();
         int32 CurrentIndex = NextIndex;
 
         NextIndex = -1;
 
-        //UE_LOG(LogTemp,Warning, TEXT("CURRENT INDEX: %d"), CurrentIndex);
-
         for (int32 i=0; i<CellPoints.Num(); ++i)
         {
             P0 = P1;
             P1 = CellPoints[i];
 
-            //UE_LOG(LogTemp,Warning, TEXT("NeighbourCells[%d]: %d"),
-            //    i,
-            //    NeighbourCells[i]
-            //    );
-
-            // Skip already visited cells
+            // Skip previous cell
             if (NeighbourCells[i] == PrevIndex)
             {
-                //UE_LOG(LogTemp,Warning, TEXT("SKIP (%d): %d"), It, PrevIndex);
                 continue;
             }
 
-            //FVector2D Intersection;
-
-            //if (UGULGeometryUtility::SegmentIntersection2D(
-            //    P0,
-            //    P1,
-            //    TargetPoint0,
-            //    TargetPoint1,
-            //    Intersection
-            //    ) )
             if (UGULGeometryUtility::SegmentIntersection2DFast(
                 P0,
                 P1,
@@ -361,19 +346,6 @@ void UDelaunatorVoronoi::FindSegmentIntersectCells(
                 TargetPoint1
                 ) )
             {
-                //float IntersectDistSq = (TargetPoint1-Intersection).SizeSquared();
-
-                //if (IntersectDistSq < DistSq)
-                //{
-                //    NextIndex = NeighbourCells[i];
-                //    DistSq = IntersectDistSq;
-
-                //    UE_LOG(LogTemp,Warning, TEXT("PrevIndex: %d, NextIndex: %d"),
-                //        PrevIndex,
-                //        NextIndex
-                //        );
-                //}
-
                 NextIndex = NeighbourCells[i];
                 break;
             }
@@ -381,6 +353,7 @@ void UDelaunatorVoronoi::FindSegmentIntersectCells(
 
         PrevIndex = CurrentIndex;
 
+        // No intersection found, break
         if (NextIndex < 0)
         {
             break;
