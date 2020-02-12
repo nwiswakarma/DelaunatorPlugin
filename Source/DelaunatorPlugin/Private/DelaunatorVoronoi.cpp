@@ -123,6 +123,30 @@ void UDelaunatorVoronoi::GenerateFrom(UDelaunatorObject* InDelaunator)
     Update();
 }
 
+UDelaunatorValueObject* UDelaunatorVoronoi::CreateDefaultCellValueObject(
+    FName ValueName,
+    TSubclassOf<UDelaunatorValueObject> ValueType
+    )
+{
+    if (! IsValidVoronoiObject() || ValueName.IsNone())
+    {
+        return nullptr;
+    }
+
+    UDelaunatorValueObject* ValueObject = Delaunator->CreateDefaultValueObject(
+        this,
+        ValueName,
+        ValueType
+        );
+
+    if (IsValid(ValueObject))
+    {
+        ValueObject->InitializeValues(GetCellCount());
+    }
+
+    return ValueObject;
+}
+
 void UDelaunatorVoronoi::GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const
 {
     if (! HasValidDelaunatorObject())
@@ -138,5 +162,25 @@ void UDelaunatorVoronoi::GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGro
     for (int32 i=0; i<PointCount; ++i)
     {
         GetCellPoints(OutPointGroups[i].Points, InTrianglePointIndices[i]);
+    }
+}
+
+void UDelaunatorVoronoi::GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices) const
+{
+    if (! HasValidDelaunatorObject())
+    {
+        return;
+    }
+
+    const TArray<int32>& InTrianglePointIndices(Delaunator->GetTrianglePointIndices());
+
+    OutPointGroups.SetNum(InPointIndices.Num());
+
+    for (int32 i=0; i<InPointIndices.Num(); ++i)
+    {
+        GetCellPoints(
+            OutPointGroups[i].Points,
+            InTrianglePointIndices[InPointIndices[i]]
+            );
     }
 }

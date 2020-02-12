@@ -91,11 +91,6 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
         int32 PointIndex
         ) const;
 
-    UDelaunatorValueObject* CreateDefaultValueObject(
-        FName ValueName,
-        TSubclassOf<UDelaunatorValueObject> ValueType
-        );
-
     void GetPointTrianglesBoundary(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const;
     void GetPointTrianglesNonBoundary(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const;
 
@@ -177,6 +172,20 @@ public:
     void K2_GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles);
 
     // Value Generation
+
+    UDelaunatorValueObject* CreateDefaultValueObject(
+        UObject* Outer,
+        FName ValueName,
+        TSubclassOf<UDelaunatorValueObject> ValueType
+        );
+
+    FORCEINLINE UDelaunatorValueObject* CreateDefaultValueObject(
+        FName ValueName,
+        TSubclassOf<UDelaunatorValueObject> ValueType
+        )
+    {
+        return CreateDefaultValueObject(this, ValueName, ValueType);
+    }
 
     UFUNCTION(BlueprintPure, Category="Delaunator")
     UDelaunatorValueObject* GetValueObject(FName ValueName);

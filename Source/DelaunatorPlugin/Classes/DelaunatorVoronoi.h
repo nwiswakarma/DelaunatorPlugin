@@ -44,12 +44,16 @@ class DELAUNATORPLUGIN_API UDelaunatorVoronoi : public UObject
 
 public:
 
+    int32 GetCellCount() const;
     const TArray<FVector2D>& GetCircumcenters() const;
 
     void GetCellPoints(TArray<FVector2D>& OutPoints, int32 TrianglePointIndex) const;
     void GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const;
+    void GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices) const;
 
     bool HasValidDelaunatorObject() const;
+    bool IsValidVoronoiObject() const;
+    const UDelaunatorObject* GetDelaunay() const;
 
     void Update();
     void GenerateFrom(UDelaunatorObject* InDelaunator);
@@ -64,6 +68,17 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get All Cell Points"))
     void K2_GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Cell Points By Point Indices"))
+    void K2_GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices);
+
+    // Value Utility
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    UDelaunatorValueObject* CreateDefaultCellValueObject(
+        FName ValueName,
+        TSubclassOf<UDelaunatorValueObject> ValueType
+        );
 };
 
 FORCEINLINE bool UDelaunatorVoronoi::HasValidDelaunatorObject() const
@@ -72,7 +87,23 @@ FORCEINLINE bool UDelaunatorVoronoi::HasValidDelaunatorObject() const
         && Delaunator->IsValidDelaunatorObject();
 }
 
+FORCEINLINE bool UDelaunatorVoronoi::IsValidVoronoiObject() const
+{
+    return HasValidDelaunatorObject()
+        && Circumcenters.Num()*3 == Delaunator->GetIndexCount();
+}
+
+FORCEINLINE const UDelaunatorObject* UDelaunatorVoronoi::GetDelaunay() const
+{
+    return Delaunator;
+}
+
 // Query Utility
+
+FORCEINLINE int32 UDelaunatorVoronoi::GetCellCount() const
+{
+    return HasValidDelaunatorObject() ? Delaunator->GetPointCount() : 0;
+}
 
 FORCEINLINE const TArray<FVector2D>& UDelaunatorVoronoi::GetCircumcenters() const
 {
@@ -135,4 +166,9 @@ FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPoints(TArray<FVector2D>& OutPoin
 FORCEINLINE void UDelaunatorVoronoi::K2_GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups)
 {
     GetAllCellPoints(OutPointGroups);
+}
+
+FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices)
+{
+    GetCellPointsByPointIndices(OutPointGroups, InPointIndices);
 }

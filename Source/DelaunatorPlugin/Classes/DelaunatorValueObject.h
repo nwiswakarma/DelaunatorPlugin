@@ -80,9 +80,9 @@ public:
         }
     }
 
-    FORCEINLINE void SetPointValues(const TArray<int32>& InPointIndices, const ValueType& InValue)
+    FORCEINLINE void SetValues(const TArray<int32>& InIndices, const ValueType& InValue)
     {
-        for (int32 PointIndex : InPointIndices)
+        for (int32 PointIndex : InIndices)
         {
             Values[PointIndex] = InValue;
         }
@@ -94,24 +94,7 @@ class DELAUNATORPLUGIN_API UDelaunatorValueObject : public UObject
 {
     GENERATED_BODY()
 
-protected:
-
-    UPROPERTY()
-    TWeakObjectPtr<UDelaunatorObject> DelaunatorObject;
-
 public:
-
-    UDelaunatorValueObject();
-
-    FORCEINLINE bool HasValidOwner() const
-    {
-        return DelaunatorObject.IsValid();
-    }
-
-    void SetOwner(UDelaunatorObject* InDelaunatorObject);
-
-    void InitializePointValues();
-    void InitializeTriangleValues();
 
     FORCEINLINE virtual void InitializeValues(int32 ValueCount)
     {
@@ -242,7 +225,7 @@ public:
     void K2_SetUniformValue(int32 InValue);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Point Values"))
-    void K2_SetValuesByIndices(const TArray<int32>& InPointIndices, int32 InValue);
+    void K2_SetValuesByIndices(const TArray<int32>& InIndices, int32 InValue);
 
     FORCEINLINE virtual int32 GetElementCount() const override
     {
@@ -254,9 +237,19 @@ public:
         return EDelaunatorValueType::DELVT_Int32;
     }
 
+    FORCEINLINE virtual uint8 GetValueUInt8(int32 Index) const override
+    {
+        return static_cast<uint8>(Values[Index]);
+    }
+
     FORCEINLINE virtual int32 GetValueInt32(int32 Index) const override
     {
         return Values[Index];
+    }
+
+    FORCEINLINE virtual void SetValueUInt8(int32 Index, uint8 InValue) override
+    {
+        Values[Index] = static_cast<int32>(InValue);
     }
 
     FORCEINLINE virtual void SetValueInt32(int32 Index, int32 InValue) override
@@ -276,7 +269,7 @@ public:
     void K2_SetUniformValue(float InValue);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Point Values"))
-    void K2_SetValuesByIndices(const TArray<int32>& InPointIndices, float InValue);
+    void K2_SetValuesByIndices(const TArray<int32>& InIndices, float InValue);
 
     virtual void InitializeValues(int32 ValueCount) override;
 
@@ -305,44 +298,32 @@ public:
 
 FORCEINLINE void UDelaunatorIntValueObject::InitializeValues(int32 ValueCount)
 {
-    check(HasValidOwner());
     SetValues(ValueCount);
 }
 
 FORCEINLINE void UDelaunatorIntValueObject::K2_SetUniformValue(int32 InValue)
 {
-    if (HasValidOwner())
-    {
-        SetUniformValue(InValue);
-    }
+    SetUniformValue(InValue);
 }
 
-FORCEINLINE void UDelaunatorIntValueObject::K2_SetValuesByIndices(const TArray<int32>& InPointIndices, int32 InValue)
+FORCEINLINE void UDelaunatorIntValueObject::K2_SetValuesByIndices(const TArray<int32>& InIndices, int32 InValue)
 {
-    if (HasValidOwner())
-    {
-        SetPointValues(InPointIndices, InValue);
-    }
+    SetValues(InIndices, InValue);
 }
 
 // Float Value
 
 FORCEINLINE void UDelaunatorFloatValueObject::InitializeValues(int32 ValueCount)
 {
-    check(HasValidOwner());
     SetValues(ValueCount);
 }
 
 FORCEINLINE void UDelaunatorFloatValueObject::K2_SetUniformValue(float InValue)
 {
-    check(HasValidOwner());
     SetUniformValue(InValue);
 }
 
-FORCEINLINE void UDelaunatorFloatValueObject::K2_SetValuesByIndices(const TArray<int32>& InPointIndices, float InValue)
+FORCEINLINE void UDelaunatorFloatValueObject::K2_SetValuesByIndices(const TArray<int32>& InIndices, float InValue)
 {
-    if (HasValidOwner())
-    {
-        SetPointValues(InPointIndices, InValue);
-    }
+    SetValues(InIndices, InValue);
 }

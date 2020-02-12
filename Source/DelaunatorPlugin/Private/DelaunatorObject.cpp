@@ -128,6 +128,7 @@ void UDelaunatorObject::CopyIndices(TArray<int32>& OutTriangles, TArray<int32>& 
 }
 
 UDelaunatorValueObject* UDelaunatorObject::CreateDefaultValueObject(
+    UObject* Outer,
     FName ValueName,
     TSubclassOf<UDelaunatorValueObject> ValueType
     )
@@ -141,7 +142,7 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultValueObject(
 
     if (! IsValid(ValueObject))
     {
-        ValueObject = NewObject<UDelaunatorValueObject>(this, ValueType);
+        ValueObject = NewObject<UDelaunatorValueObject>(Outer, ValueType);
         ValueMap.Emplace(ValueName, ValueObject);
     }
 
@@ -160,8 +161,7 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultPointValueObject(
 
     if (IsValid(ValueObject))
     {
-        ValueObject->SetOwner(this);
-        ValueObject->InitializePointValues();
+        ValueObject->InitializeValues(GetPointCount());
     }
 
     return ValueObject;
@@ -179,8 +179,7 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultTriangleValueObject(
 
     if (IsValid(ValueObject))
     {
-        ValueObject->SetOwner(this);
-        ValueObject->InitializeTriangleValues();
+        ValueObject->InitializeValues(GetTriangleCount());
     }
 
     return ValueObject;

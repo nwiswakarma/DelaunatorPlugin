@@ -27,30 +27,3 @@
 
 #include "DelaunatorValueObject.h"
 
-// Base Value Object
-
-UDelaunatorValueObject::UDelaunatorValueObject()
-    : DelaunatorObject(nullptr)
-{
-}
-
-void UDelaunatorValueObject::SetOwner(UDelaunatorObject* InDelaunatorObject)
-{
-    DelaunatorObject = InDelaunatorObject;
-}
-
-void UDelaunatorValueObject::InitializePointValues()
-{
-    if (HasValidOwner())
-    {
-        InitializeValues(DelaunatorObject->GetPointCount());
-    }
-}
-
-void UDelaunatorValueObject::InitializeTriangleValues()
-{
-    if (HasValidOwner())
-    {
-        InitializeValues(DelaunatorObject->GetTriangleCount());
-    }
-}
