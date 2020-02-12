@@ -44,8 +44,8 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
     delaunator::Delaunator Delaunator;
 
     TArray<FVector2D> Points;
-    TArray<int32> TrianglePointIndices;
     TArray<int32> Hull;
+    TArray<int32> HullIndex;
     TArray<int32> Inedges;
     TBitArray<> BoundaryFlags;
 
@@ -104,7 +104,6 @@ public:
     const TArray<int32>& GetHalfEdges() const;
     const TArray<int32>& GetInedges() const;
     const TArray<int32>& GetHull() const;
-    const TArray<int32>& GetTrianglePointIndices() const;
     const TBitArray<>& GetBoundaryFlags() const;
 
     void GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
@@ -117,8 +116,6 @@ public:
     void GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles) const;
 
     void GetTriangleCircumcenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles) const;
-
-    //void PointFillVisit(const TArray<int32>& InitialPoints);
 
     void GeneratePointsDepthValues(
         UDelaunatorValueObject* ValueObject,
@@ -268,6 +265,11 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Point Index (Single)"))
     int32 K2_GetTrianglePointIndex(int32 InPointIndex) const;
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Point"))
+    int32 K2_FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex = 0);
+    int32 FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex = 0) const;
+    int32 FindCloser(int32 i, const FVector2D& TargetPoint) const;
+
     // Boundary Utility
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
@@ -313,7 +315,7 @@ FORCEINLINE bool UDelaunatorObject::IsValidDelaunatorObject() const
         && Hull.Num() >= 3
         && Delaunator.triangles.Num() >= 3
         && Delaunator.triangles.Num() == Delaunator.halfedges.Num()
-        && Delaunator.halfedges.Num() == Inedges.Num();
+        && Inedges.Num() == Points.Num();
 }
 
 FORCEINLINE int32 UDelaunatorObject::GetPointCount() const
@@ -354,11 +356,6 @@ FORCEINLINE const TArray<int32>& UDelaunatorObject::GetInedges() const
 FORCEINLINE const TArray<int32>& UDelaunatorObject::GetHull() const
 {
     return Hull;
-}
-
-FORCEINLINE const TArray<int32>& UDelaunatorObject::GetTrianglePointIndices() const
-{
-    return TrianglePointIndices;
 }
 
 FORCEINLINE const TBitArray<>& UDelaunatorObject::GetBoundaryFlags() const
@@ -411,7 +408,7 @@ inline void UDelaunatorObject::GetTriangleIndicesFlat(TArray<int32>& OutIndices,
 FORCEINLINE int32 UDelaunatorObject::GetTrianglePointIndex(int32 InPointIndex) const
 {
     return (IsValidDelaunatorObject() && Points.IsValidIndex(InPointIndex))
-        ? GetTrianglePointIndices()[InPointIndex]
+        ? GetHalfEdges()[GetInedges()[InPointIndex]]
         : -1;
 }
 
@@ -684,6 +681,11 @@ FORCEINLINE void UDelaunatorObject::K2_GetTriangleCircumcenters(TArray<FVector2D
 FORCEINLINE int32 UDelaunatorObject::K2_GetTrianglePointIndex(int32 InPointIndex) const
 {
     return GetTrianglePointIndex(InPointIndex);
+}
+
+FORCEINLINE int32 UDelaunatorObject::K2_FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex)
+{
+    return FindPoint(TargetPoint, InitialTrianglePointIndex);
 }
 
 inline void UDelaunatorObject::K2_GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)

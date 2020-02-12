@@ -37,9 +37,12 @@ void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
     const TArray<int32>& InTriangles(GetTriangles());
     const TArray<int32>& InHalfEdges(GetHalfEdges());
 
+    const int32 PointCount = Points.Num();
+
     // Generate hull and boundary data
 
     Hull.Reset(Delaunator.hull_size);
+
     {
         int32 e = Delaunator.hull_start;
         do
@@ -47,7 +50,20 @@ void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
             Hull.Emplace(e);
         }
         while ((e = Delaunator.hull_next[e]) != Delaunator.hull_start);
+
+        HullIndex.SetNumUninitialized(PointCount);
+        FMemory::Memset(
+            HullIndex.GetData(),
+            ~0,
+            HullIndex.Num()*HullIndex.GetTypeSize()
+            );
+
+        for (int32 i=0; i<Hull.Num(); ++i)
+        {
+            HullIndex[Hull[i]] = i;
+        }
     }
+    
 
     // Generate Inedges
 
@@ -55,7 +71,7 @@ void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
     // Used to give the first neighbor of each point; for this reason,
     // on the hull we give priority to exterior halfedges
 
-    Inedges.SetNumUninitialized(InHalfEdges.Num());
+    Inedges.SetNumUninitialized(PointCount);
     FMemory::Memset(Inedges.GetData(), ~0, Inedges.Num()*Inedges.GetTypeSize());
 
     for (int32 e=0; e<InHalfEdges.Num(); ++e)
@@ -65,49 +81,6 @@ void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
         if (InHalfEdges[e] == -1 || Inedges[p] == -1)
         {
             Inedges[p] = e;
-        }
-    }
-
-
-    // Generate triangle point indices
-    {
-        const int32 TriangleCount = InTriangles.Num() / 3;
-
-        TBitArray<> VisitedPointFlags;
-        VisitedPointFlags.Init(false, Points.Num());
-
-        TrianglePointIndices.SetNumUninitialized(Points.Num());
-        FMemory::Memset(
-            TrianglePointIndices.GetData(),
-            ~0,
-            TrianglePointIndices.Num()*TrianglePointIndices.GetTypeSize()
-            );
-
-        for (int32 ti=0; ti<TriangleCount; ++ti)
-        {
-            int32 i = ti*3;
-            int32 ti0 = i;
-            int32 ti1 = i+1;
-            int32 ti2 = i+2;
-            int32 i0 = InTriangles[ti0];
-            int32 i1 = InTriangles[ti1];
-            int32 i2 = InTriangles[ti2];
-
-            if (! VisitedPointFlags[i0])
-            {
-                TrianglePointIndices[i0] = ti0;
-                VisitedPointFlags[i0] = true;
-            }
-            if (! VisitedPointFlags[i1])
-            {
-                TrianglePointIndices[i1] = ti1;
-                VisitedPointFlags[i1] = true;
-            }
-            if (! VisitedPointFlags[i2])
-            {
-                TrianglePointIndices[i2] = ti2;
-                VisitedPointFlags[i2] = true;
-            }
         }
     }
 
@@ -1148,4 +1121,81 @@ UDelaunatorVoronoi* UDelaunatorObject::GenerateVoronoiDual()
     }
 
     return Voronoi;
+}
+
+int32 UDelaunatorObject::FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex) const
+{
+    if (! IsValidDelaunatorObject())
+    {
+        return -1;
+    }
+
+    const int32 i0 = InitialTrianglePointIndex;
+    int32 i = i0;
+    int32 c;
+
+    while ((c = FindCloser(i, TargetPoint)) >= 0 && c != i && c != i0)
+    {
+        i = c;
+    }
+
+    return c;
+}
+
+int32 UDelaunatorObject::FindCloser(int32 i, const FVector2D& TargetPoint) const
+{
+    const TArray<int32>& Triangles(GetTriangles());
+    const TArray<int32>& HalfEdges(GetHalfEdges());
+
+    check(IsValidDelaunatorObject());
+
+    if (Inedges[i] == -1)
+    {
+        return (i+1) % (Points.Num() >> 1);
+    }
+
+    const int32 e0 = Inedges[i];
+    int32 e = e0;
+    int32 c = i;
+    float dc = (TargetPoint-Points[i]).SizeSquared();
+
+    do
+    {
+        int32 t = Triangles[e];
+        const float dt = (TargetPoint-Points[t]).SizeSquared();
+
+        if (dt < dc)
+        {
+            dc = dt;
+            c = t;
+        }
+
+        e = ((e%3) == 2) ? e-2 : e+1;
+
+        // Ensure sane triangulation
+        check(i == Triangles[e]);
+
+        e = HalfEdges[e];
+
+        // Hull point
+        if (e == -1)
+        {
+            e = Hull[(HullIndex[i] + 1) % Hull.Num()];
+
+            if (e != t)
+            {
+                const float dh = (TargetPoint-Points[e]).SizeSquared();
+
+                if (dh < dc)
+                {
+                    return e;
+                }
+            }
+
+            break;
+        }
+    }
+    while (e != e0);
+
+    return c;
 }

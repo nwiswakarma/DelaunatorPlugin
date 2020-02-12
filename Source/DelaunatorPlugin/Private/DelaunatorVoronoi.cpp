@@ -147,6 +147,45 @@ UDelaunatorValueObject* UDelaunatorVoronoi::CreateDefaultCellValueObject(
     return ValueObject;
 }
 
+void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex) const
+{
+    OutPoints.Reset();
+
+    if (! HasValidDelaunatorObject())
+    {
+        return;
+    }
+
+    const TArray<int32>& InTriangles(Delaunator->GetTriangles());
+    const TArray<int32>& InHalfEdges(Delaunator->GetHalfEdges());
+    const TArray<int32>& InInedges(Delaunator->GetInedges());
+
+    const int32 e0 = InInedges[PointIndex];
+
+    // coincident point
+    if (e0 == -1)
+    {
+        return;
+    }
+
+    // Iterate over point triangles
+
+    int32 e = e0;
+    do
+    {
+        const int32 t = e / 3;
+        OutPoints.Emplace(Circumcenters[t]);
+
+        e = ((e%3) == 2) ? e-2 : e+1;
+
+        // Ensure sane triangulation
+        check(PointIndex == InTriangles[e]);
+
+        e = InHalfEdges[e];
+    }
+    while (e != e0 && e != -1);
+}
+
 void UDelaunatorVoronoi::GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const
 {
     if (! HasValidDelaunatorObject())
@@ -154,14 +193,13 @@ void UDelaunatorVoronoi::GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGro
         return;
     }
 
-    const TArray<int32>& InTrianglePointIndices(Delaunator->GetTrianglePointIndices());
     const int32 PointCount = Delaunator->GetPointCount();
 
     OutPointGroups.SetNum(PointCount);
 
     for (int32 i=0; i<PointCount; ++i)
     {
-        GetCellPoints(OutPointGroups[i].Points, InTrianglePointIndices[i]);
+        GetCellPoints(OutPointGroups[i].Points, i);
     }
 }
 
@@ -172,15 +210,15 @@ void UDelaunatorVoronoi::GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& 
         return;
     }
 
-    const TArray<int32>& InTrianglePointIndices(Delaunator->GetTrianglePointIndices());
+    const int32 PointCount = InPointIndices.Num();
 
-    OutPointGroups.SetNum(InPointIndices.Num());
+    OutPointGroups.SetNum(PointCount);
 
-    for (int32 i=0; i<InPointIndices.Num(); ++i)
+    for (int32 i=0; i<PointCount; ++i)
     {
         GetCellPoints(
             OutPointGroups[i].Points,
-            InTrianglePointIndices[InPointIndices[i]]
+            InPointIndices[i]
             );
     }
 }

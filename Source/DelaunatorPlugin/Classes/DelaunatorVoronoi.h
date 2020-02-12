@@ -47,7 +47,7 @@ public:
     int32 GetCellCount() const;
     const TArray<FVector2D>& GetCircumcenters() const;
 
-    void GetCellPoints(TArray<FVector2D>& OutPoints, int32 TrianglePointIndex) const;
+    void GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex) const;
     void GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const;
     void GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices) const;
 
@@ -110,57 +110,14 @@ FORCEINLINE const TArray<FVector2D>& UDelaunatorVoronoi::GetCircumcenters() cons
     return Circumcenters;
 }
 
-inline void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, int32 TrianglePointIndex) const
-{
-    OutPoints.Reset();
-
-    if (! HasValidDelaunatorObject())
-    {
-        return;
-    }
-
-    const TArray<int32>& InTriangles(Delaunator->GetTriangles());
-    const TArray<int32>& InHalfEdges(Delaunator->GetHalfEdges());
-    const TArray<int32>& InInedges(Delaunator->GetHalfEdges());
-
-    const int32 t0 = InTriangles[TrianglePointIndex];
-    const int32 e0 = InInedges[TrianglePointIndex];
-
-    // coincident point
-    if (e0 == -1)
-    {
-        return;
-    }
-
-    // Iterate over point triangles
-
-    int32 e = e0;
-    do
-    {
-        const int32 t = e / 3;
-        OutPoints.Emplace(Circumcenters[t]);
-
-        e = ((e%3) == 2) ? e-2 : e+1;
-
-        if (t0 != InTriangles[e])
-        {
-            // Bad triangulation
-            break;
-        }
-
-        e = InHalfEdges[e];
-    }
-    while (e != e0 && e != -1);
-}
-
 FORCEINLINE const TArray<FVector2D>& UDelaunatorVoronoi::K2_GetCircumcenters()
 {
     return GetCircumcenters();
 }
 
-FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPoints(TArray<FVector2D>& OutPoints, int32 TrianglePointIndex)
+FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex)
 {
-    GetCellPoints(OutPoints, TrianglePointIndex);
+    GetCellPoints(OutPoints, PointIndex);
 }
 
 FORCEINLINE void UDelaunatorVoronoi::K2_GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups)
