@@ -1123,18 +1123,17 @@ UDelaunatorVoronoi* UDelaunatorObject::GenerateVoronoiDual()
     return Voronoi;
 }
 
-int32 UDelaunatorObject::FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex) const
+int32 UDelaunatorObject::FindPoint(const FVector2D& TargetPoint, int32 InitialPoint) const
 {
     if (! IsValidDelaunatorObject())
     {
         return -1;
     }
 
-    const int32 i0 = InitialTrianglePointIndex;
-    int32 i = i0;
+    int32 i = InitialPoint;
     int32 c;
 
-    while ((c = FindCloser(i, TargetPoint)) >= 0 && c != i && c != i0)
+    while ((c = FindCloser(i, TargetPoint)) >= 0 && c != i && c != InitialPoint)
     {
         i = c;
     }

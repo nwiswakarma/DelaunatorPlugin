@@ -26,6 +26,7 @@
 // 
 
 #include "DelaunatorVoronoi.h"
+#include "Geom/GULGeometryUtilityLibrary.h"
 
 void UDelaunatorVoronoi::Update()
 {
@@ -186,6 +187,48 @@ void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, int32 Point
     while (e != e0 && e != -1);
 }
 
+void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, TArray<int32>& OutPointIndices, int32 PointIndex) const
+{
+    OutPoints.Reset();
+    OutPointIndices.Reset();
+
+    if (! HasValidDelaunatorObject())
+    {
+        return;
+    }
+
+    const TArray<int32>& InTriangles(Delaunator->GetTriangles());
+    const TArray<int32>& InHalfEdges(Delaunator->GetHalfEdges());
+    const TArray<int32>& InInedges(Delaunator->GetInedges());
+
+    const int32 e0 = InInedges[PointIndex];
+
+    // coincident point
+    if (e0 == -1)
+    {
+        return;
+    }
+
+    // Iterate over point triangles
+
+    int32 e = e0;
+    do
+    {
+        const int32 t = e / 3;
+
+        OutPoints.Emplace(Circumcenters[t]);
+        OutPointIndices.Emplace(InTriangles[e]);
+
+        e = ((e%3) == 2) ? e-2 : e+1;
+
+        // Ensure sane triangulation
+        check(PointIndex == InTriangles[e]);
+
+        e = InHalfEdges[e];
+    }
+    while (e != e0 && e != -1);
+}
+
 void UDelaunatorVoronoi::GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const
 {
     if (! HasValidDelaunatorObject())
@@ -220,5 +263,129 @@ void UDelaunatorVoronoi::GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& 
             OutPointGroups[i].Points,
             InPointIndices[i]
             );
+    }
+}
+
+void UDelaunatorVoronoi::FindSegmentIntersectCells(
+    TArray<int32>& OutCells,
+    const FVector2D& TargetPoint0,
+    const FVector2D& TargetPoint1,
+    int32 InitialPoint
+    ) const
+{
+    OutCells.Reset();
+
+    if (! IsValidVoronoiObject())
+    {
+        return;
+    }
+
+    const int32 CellIndex = Delaunator->FindPoint(TargetPoint0, InitialPoint);
+
+    // Invalid starting point, abort
+    if (CellIndex < 0)
+    {
+        return;
+    }
+
+    OutCells.Emplace(CellIndex);
+
+    // Coincident segment points, return
+    if ((TargetPoint1-TargetPoint0).SizeSquared() < KINDA_SMALL_NUMBER)
+    {
+        return;
+    }
+
+    TArray<FVector2D> CellPoints;
+    TArray<int32> NeighbourCells;
+
+    //float DistSq = BIG_NUMBER;
+    int32 PrevIndex = -1;
+    int32 NextIndex = CellIndex;
+
+    enum { SEARCH_LIMIT = 1000 };
+
+    //while (true)
+    for (int32 It=0; It<SEARCH_LIMIT; ++It)
+    {
+        CellPoints.Reset();
+        NeighbourCells.Reset();
+
+        GetCellPoints(CellPoints, NeighbourCells, NextIndex);
+
+        if (CellPoints.Num() < 2)
+        {
+            break;
+        }
+
+        check(CellPoints.Num() == NeighbourCells.Num());
+
+        FVector2D P0;
+        FVector2D P1 = CellPoints.Last();
+        int32 CurrentIndex = NextIndex;
+
+        NextIndex = -1;
+
+        //UE_LOG(LogTemp,Warning, TEXT("CURRENT INDEX: %d"), CurrentIndex);
+
+        for (int32 i=0; i<CellPoints.Num(); ++i)
+        {
+            P0 = P1;
+            P1 = CellPoints[i];
+
+            //UE_LOG(LogTemp,Warning, TEXT("NeighbourCells[%d]: %d"),
+            //    i,
+            //    NeighbourCells[i]
+            //    );
+
+            // Skip already visited cells
+            if (NeighbourCells[i] == PrevIndex)
+            {
+                //UE_LOG(LogTemp,Warning, TEXT("SKIP (%d): %d"), It, PrevIndex);
+                continue;
+            }
+
+            //FVector2D Intersection;
+
+            //if (UGULGeometryUtility::SegmentIntersection2D(
+            //    P0,
+            //    P1,
+            //    TargetPoint0,
+            //    TargetPoint1,
+            //    Intersection
+            //    ) )
+            if (UGULGeometryUtility::SegmentIntersection2DFast(
+                P0,
+                P1,
+                TargetPoint0,
+                TargetPoint1
+                ) )
+            {
+                //float IntersectDistSq = (TargetPoint1-Intersection).SizeSquared();
+
+                //if (IntersectDistSq < DistSq)
+                //{
+                //    NextIndex = NeighbourCells[i];
+                //    DistSq = IntersectDistSq;
+
+                //    UE_LOG(LogTemp,Warning, TEXT("PrevIndex: %d, NextIndex: %d"),
+                //        PrevIndex,
+                //        NextIndex
+                //        );
+                //}
+
+                NextIndex = NeighbourCells[i];
+                break;
+            }
+        }
+
+        PrevIndex = CurrentIndex;
+
+        if (NextIndex < 0)
+        {
+            break;
+        }
+
+        OutCells.Emplace(NextIndex);
     }
 }

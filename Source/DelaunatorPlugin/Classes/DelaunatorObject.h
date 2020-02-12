@@ -168,6 +168,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Indices (By Flat Indices)"))
     void K2_GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles);
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Point"))
+    int32 K2_GetTrianglePoint(int32 TrianglePointIndex) const;
+
     // Value Generation
 
     UDelaunatorValueObject* CreateDefaultValueObject(
@@ -266,8 +269,8 @@ public:
     int32 K2_GetTrianglePointIndex(int32 InPointIndex) const;
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Point"))
-    int32 K2_FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex = 0);
-    int32 FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex = 0) const;
+    int32 K2_FindPoint(const FVector2D& TargetPoint, int32 InitialPoint = 0);
+    int32 FindPoint(const FVector2D& TargetPoint, int32 InitialPoint = 0) const;
     int32 FindCloser(int32 i, const FVector2D& TargetPoint) const;
 
     // Boundary Utility
@@ -683,9 +686,9 @@ FORCEINLINE int32 UDelaunatorObject::K2_GetTrianglePointIndex(int32 InPointIndex
     return GetTrianglePointIndex(InPointIndex);
 }
 
-FORCEINLINE int32 UDelaunatorObject::K2_FindPoint(const FVector2D& TargetPoint, int32 InitialTrianglePointIndex)
+FORCEINLINE int32 UDelaunatorObject::K2_FindPoint(const FVector2D& TargetPoint, int32 InitialPoint)
 {
-    return FindPoint(TargetPoint, InitialTrianglePointIndex);
+    return FindPoint(TargetPoint, InitialPoint);
 }
 
 inline void UDelaunatorObject::K2_GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles)
@@ -704,6 +707,17 @@ inline void UDelaunatorObject::K2_GetTriangleIndicesFlat(TArray<int32>& OutIndic
     GetTriangleIndicesFlat(OutIndices, InFilterTriangles);
 
     OutIndices.Shrink();
+}
+
+FORCEINLINE int32 UDelaunatorObject::K2_GetTrianglePoint(int32 TrianglePointIndex) const
+{
+    if (IsValidDelaunatorObject())
+    {
+        return GetTriangles().IsValidIndex(TrianglePointIndex)
+            ? GetTriangles()[TrianglePointIndex]
+            : -1;
+    }
+    return -1;
 }
 
 // Value Object Utility

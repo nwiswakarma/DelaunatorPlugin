@@ -48,6 +48,8 @@ public:
     const TArray<FVector2D>& GetCircumcenters() const;
 
     void GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex) const;
+    void GetCellPoints(TArray<FVector2D>& OutPoints, TArray<int32>& OutPointIndices, int32 PointIndex) const;
+
     void GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const;
     void GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices) const;
 
@@ -64,13 +66,31 @@ public:
     const TArray<FVector2D>& K2_GetCircumcenters();
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Cell Points"))
-    void K2_GetCellPoints(TArray<FVector2D>& OutPoints, int32 TrianglePointIndex);
+    void K2_GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Cell Points And Neighbours"))
+    void K2_GetCellPointsAndNeighbours(TArray<FVector2D>& OutPoints, TArray<int32>& OutPointIndices, int32 PointIndex);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get All Cell Points"))
     void K2_GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Cell Points By Point Indices"))
     void K2_GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Segment Intersect Cells"))
+    void K2_FindSegmentIntersectCells(
+        TArray<int32>& OutCells,
+        const FVector2D& TargetPoint0,
+        const FVector2D& TargetPoint1,
+        int32 InitialPoint = 0
+        );
+
+    void FindSegmentIntersectCells(
+        TArray<int32>& OutCells,
+        const FVector2D& TargetPoint0,
+        const FVector2D& TargetPoint1,
+        int32 InitialPoint = 0
+        ) const;
 
     // Value Utility
 
@@ -120,6 +140,11 @@ FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPoints(TArray<FVector2D>& OutPoin
     GetCellPoints(OutPoints, PointIndex);
 }
 
+FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPointsAndNeighbours(TArray<FVector2D>& OutPoints, TArray<int32>& OutPointIndices, int32 PointIndex)
+{
+    GetCellPoints(OutPoints, OutPointIndices, PointIndex);
+}
+
 FORCEINLINE void UDelaunatorVoronoi::K2_GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups)
 {
     GetAllCellPoints(OutPointGroups);
@@ -128,4 +153,19 @@ FORCEINLINE void UDelaunatorVoronoi::K2_GetAllCellPoints(TArray<FGULVector2DGrou
 FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices)
 {
     GetCellPointsByPointIndices(OutPointGroups, InPointIndices);
+}
+
+FORCEINLINE void UDelaunatorVoronoi::K2_FindSegmentIntersectCells(
+    TArray<int32>& OutCells,
+    const FVector2D& TargetPoint0,
+    const FVector2D& TargetPoint1,
+    int32 InitialPoint
+    )
+{
+    FindSegmentIntersectCells(
+        OutCells,
+        TargetPoint0,
+        TargetPoint1,
+        InitialPoint
+        );
 }
