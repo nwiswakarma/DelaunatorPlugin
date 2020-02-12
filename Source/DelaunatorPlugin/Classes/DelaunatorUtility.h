@@ -48,4 +48,13 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     static void GenerateDelaunatorIndices(TArray<int32>& OutTriangles, TArray<int32>& OutHalfEdges, const TArray<FVector2D>& InPoints);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GenerateJitteredGridPoints(
+        TArray<FVector2D>& OutPoints,
+        int32& OutBoundaryPointOffset,
+        FBox2D Bounds,
+        float MaxDeviation = .85f,
+        int32 CellCountPerDimension = 100
+        );
 };

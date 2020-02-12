@@ -34,6 +34,8 @@
 #include "Geom/GULGeometryUtilityLibrary.h"
 #include "DelaunatorObject.generated.h"
 
+class UDelaunatorVoronoi;
+
 UCLASS(BlueprintType)
 class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
 {
@@ -42,6 +44,9 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
     delaunator::Delaunator Delaunator;
 
     TArray<FVector2D> Points;
+    TArray<int32> TrianglePointIndices;
+    TArray<int32> Hull;
+    TArray<int32> Inedges;
     TBitArray<> BoundaryFlags;
 
     UPROPERTY()
@@ -87,7 +92,6 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
         ) const;
 
     UDelaunatorValueObject* CreateDefaultValueObject(
-        UObject* Outer,
         FName ValueName,
         TSubclassOf<UDelaunatorValueObject> ValueType
         );
@@ -103,6 +107,10 @@ public:
     const TArray<FVector2D>& GetPoints() const;
     const TArray<int32>& GetTriangles() const;
     const TArray<int32>& GetHalfEdges() const;
+    const TArray<int32>& GetInedges() const;
+    const TArray<int32>& GetHull() const;
+    const TArray<int32>& GetTrianglePointIndices() const;
+    const TBitArray<>& GetBoundaryFlags() const;
 
     void GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
     void GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
@@ -156,6 +164,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Half-Edges"))
     const TArray<int32>& K2_GetHalfEdges();
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Hull"))
+    const TArray<int32>& K2_GetHull();
+
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangles As Int Vectors"))
     void K2_GetTrianglesAsIntVectors(TArray<FIntVector>& OutTriangles);
 
@@ -172,14 +183,12 @@ public:
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     UDelaunatorValueObject* CreateDefaultPointValueObject(
-        UObject* Outer,
         FName ValueName,
         TSubclassOf<UDelaunatorValueObject> ValueType
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     UDelaunatorValueObject* CreateDefaultTriangleValueObject(
-        UObject* Outer,
         FName ValueName,
         TSubclassOf<UDelaunatorValueObject> ValueType
         );
@@ -233,9 +242,6 @@ public:
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
-    void GetHullPointIndices(TArray<int32>& OutPointIndices);
-
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
     void GetHullBoundaryTriangles(TArray<int32>& OutTriangles);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Point Triangles"))
@@ -285,13 +291,20 @@ public:
         bool bClosedPoly = false,
         bool bAllowDirectConnection = false
         );
+
+    // Voronoi Utility
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    UDelaunatorVoronoi* GenerateVoronoiDual();
 };
 
 FORCEINLINE bool UDelaunatorObject::IsValidDelaunatorObject() const
 {
     return Points.Num() >= 3
+        && Hull.Num() >= 3
         && Delaunator.triangles.Num() >= 3
-        && Delaunator.triangles.Num() == Delaunator.halfedges.Num();
+        && Delaunator.triangles.Num() == Delaunator.halfedges.Num()
+        && Delaunator.halfedges.Num() == Inedges.Num();
 }
 
 FORCEINLINE int32 UDelaunatorObject::GetPointCount() const
@@ -322,6 +335,26 @@ FORCEINLINE const TArray<int32>& UDelaunatorObject::GetTriangles() const
 FORCEINLINE const TArray<int32>& UDelaunatorObject::GetHalfEdges() const
 {
     return Delaunator.halfedges;
+}
+
+FORCEINLINE const TArray<int32>& UDelaunatorObject::GetInedges() const
+{
+    return Inedges;
+}
+
+FORCEINLINE const TArray<int32>& UDelaunatorObject::GetHull() const
+{
+    return Hull;
+}
+
+FORCEINLINE const TArray<int32>& UDelaunatorObject::GetTrianglePointIndices() const
+{
+    return TrianglePointIndices;
+}
+
+FORCEINLINE const TBitArray<>& UDelaunatorObject::GetBoundaryFlags() const
+{
+    return BoundaryFlags;
 }
 
 inline void UDelaunatorObject::GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const
@@ -368,15 +401,9 @@ inline void UDelaunatorObject::GetTriangleIndicesFlat(TArray<int32>& OutIndices,
 
 FORCEINLINE int32 UDelaunatorObject::GetTrianglePointIndex(int32 InPointIndex) const
 {
-    if (IsValidDelaunatorObject() && Points.IsValidIndex(InPointIndex))
-    {
-        int32 TrianglePointIndex = -1;
-        return GetTriangles().Find(InPointIndex, TrianglePointIndex)
-            ? TrianglePointIndex
-            : -1;
-    }
-
-    return -1;
+    return (IsValidDelaunatorObject() && Points.IsValidIndex(InPointIndex))
+        ? GetTrianglePointIndices()[InPointIndex]
+        : -1;
 }
 
 inline void UDelaunatorObject::GetPointTrianglesNonBoundary(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const
@@ -582,6 +609,11 @@ FORCEINLINE const TArray<int32>& UDelaunatorObject::K2_GetHalfEdges()
     return GetHalfEdges();
 }
 
+FORCEINLINE const TArray<int32>& UDelaunatorObject::K2_GetHull()
+{
+    return GetHull();
+}
+
 inline void UDelaunatorObject::K2_GetTrianglesAsIntVectors(TArray<FIntVector>& OutTriangles)
 {
     if (IsValidDelaunatorObject())
@@ -608,32 +640,12 @@ FORCEINLINE void UDelaunatorObject::FilterUniquePointIndices(
     OutPointIndices = TSet<int32>(InPointIndices).Array();
 }
 
-inline void UDelaunatorObject::GetHullPointIndices(TArray<int32>& OutPointIndices)
+FORCEINLINE void UDelaunatorObject::GetHullBoundaryTriangles(TArray<int32>& OutTriangles)
 {
     if (IsValidDelaunatorObject())
     {
-        OutPointIndices.Reset(Delaunator.hull_size);
-
-        int32 e = Delaunator.hull_start;
-        do
-        {
-            OutPointIndices.Emplace(e);
-        }
-        while ((e = Delaunator.hull_next[e]) != Delaunator.hull_start);
+        GetTrianglesByEdgeIndices(OutTriangles, GetHull());
     }
-}
-
-inline void UDelaunatorObject::GetHullBoundaryTriangles(TArray<int32>& OutTriangles)
-{
-    if (! IsValidDelaunatorObject())
-    {
-        return;
-    }
-
-    TArray<int32> HullPointIndices;
-    GetHullPointIndices(HullPointIndices);
-
-    GetTrianglesByEdgeIndices(OutTriangles, HullPointIndices);
 }
 
 FORCEINLINE void UDelaunatorObject::K2_GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex)

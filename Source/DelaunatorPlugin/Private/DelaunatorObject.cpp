@@ -27,18 +27,95 @@
 
 #include "DelaunatorObject.h"
 #include "Poly/GULPolyUtilityLibrary.h"
+#include "DelaunatorVoronoi.h"
 
 void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
 {
     Points = InPoints;
     Delaunator.update(Points);
 
-    TArray<int32> BoundaryPointIndices;
-    GetHullPointIndices(BoundaryPointIndices);
+    const TArray<int32>& InTriangles(GetTriangles());
+    const TArray<int32>& InHalfEdges(GetHalfEdges());
 
+    // Generate hull and boundary data
+
+    Hull.Reset(Delaunator.hull_size);
+    {
+        int32 e = Delaunator.hull_start;
+        do
+        {
+            Hull.Emplace(e);
+        }
+        while ((e = Delaunator.hull_next[e]) != Delaunator.hull_start);
+    }
+
+    // Generate Inedges
+
+    // Compute an index from each point to an (arbitrary) incoming halfedge
+    // Used to give the first neighbor of each point; for this reason,
+    // on the hull we give priority to exterior halfedges
+
+    Inedges.SetNumUninitialized(InHalfEdges.Num());
+    FMemory::Memset(Inedges.GetData(), ~0, Inedges.Num()*Inedges.GetTypeSize());
+
+    for (int32 e=0; e<InHalfEdges.Num(); ++e)
+    {
+        const int32 p = InTriangles[((e%3) == 2) ? e-2 : e+1];
+
+        if (InHalfEdges[e] == -1 || Inedges[p] == -1)
+        {
+            Inedges[p] = e;
+        }
+    }
+
+
+    // Generate triangle point indices
+    {
+        const int32 TriangleCount = InTriangles.Num() / 3;
+
+        TBitArray<> VisitedPointFlags;
+        VisitedPointFlags.Init(false, Points.Num());
+
+        TrianglePointIndices.SetNumUninitialized(Points.Num());
+        FMemory::Memset(
+            TrianglePointIndices.GetData(),
+            ~0,
+            TrianglePointIndices.Num()*TrianglePointIndices.GetTypeSize()
+            );
+
+        for (int32 ti=0; ti<TriangleCount; ++ti)
+        {
+            int32 i = ti*3;
+            int32 ti0 = i;
+            int32 ti1 = i+1;
+            int32 ti2 = i+2;
+            int32 i0 = InTriangles[ti0];
+            int32 i1 = InTriangles[ti1];
+            int32 i2 = InTriangles[ti2];
+
+            if (! VisitedPointFlags[i0])
+            {
+                TrianglePointIndices[i0] = ti0;
+                VisitedPointFlags[i0] = true;
+            }
+            if (! VisitedPointFlags[i1])
+            {
+                TrianglePointIndices[i1] = ti1;
+                VisitedPointFlags[i1] = true;
+            }
+            if (! VisitedPointFlags[i2])
+            {
+                TrianglePointIndices[i2] = ti2;
+                VisitedPointFlags[i2] = true;
+            }
+        }
+    }
+
+    // Generate boundary flags
+    
     BoundaryFlags.Init(false, GetPointCount());
 
-    for (int32 i : BoundaryPointIndices)
+    for (int32 i : Hull)
     {
         BoundaryFlags[i] = true;
     }
@@ -51,7 +128,6 @@ void UDelaunatorObject::CopyIndices(TArray<int32>& OutTriangles, TArray<int32>& 
 }
 
 UDelaunatorValueObject* UDelaunatorObject::CreateDefaultValueObject(
-    UObject* Outer,
     FName ValueName,
     TSubclassOf<UDelaunatorValueObject> ValueType
     )
@@ -65,7 +141,7 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultValueObject(
 
     if (! IsValid(ValueObject))
     {
-        ValueObject = NewObject<UDelaunatorValueObject>(Outer, ValueType);
+        ValueObject = NewObject<UDelaunatorValueObject>(this, ValueType);
         ValueMap.Emplace(ValueName, ValueObject);
     }
 
@@ -73,13 +149,11 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultValueObject(
 }
 
 UDelaunatorValueObject* UDelaunatorObject::CreateDefaultPointValueObject(
-    UObject* Outer,
     FName ValueName,
     TSubclassOf<UDelaunatorValueObject> ValueType
     )
 {
     UDelaunatorValueObject* ValueObject = CreateDefaultValueObject(
-        Outer,
         ValueName,
         ValueType
         );
@@ -94,13 +168,11 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultPointValueObject(
 }
 
 UDelaunatorValueObject* UDelaunatorObject::CreateDefaultTriangleValueObject(
-    UObject* Outer,
     FName ValueName,
     TSubclassOf<UDelaunatorValueObject> ValueType
     )
 {
     UDelaunatorValueObject* ValueObject = CreateDefaultValueObject(
-        Outer,
         ValueName,
         ValueType
         );
@@ -1065,4 +1137,16 @@ void UDelaunatorObject::GenerateTrianglesDepthValues(
             }
         }
     }
+}
+
+UDelaunatorVoronoi* UDelaunatorObject::GenerateVoronoiDual()
+{
+    UDelaunatorVoronoi* Voronoi = NewObject<UDelaunatorVoronoi>(this);
+
+    if (IsValid(Voronoi))
+    {
+        Voronoi->GenerateFrom(this);
+    }
+
+    return Voronoi;
 }
