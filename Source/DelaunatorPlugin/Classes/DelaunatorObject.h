@@ -269,8 +269,8 @@ public:
     int32 K2_GetTrianglePointIndex(int32 InPointIndex) const;
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Point"))
-    int32 K2_FindPoint(const FVector2D& TargetPoint, int32 InitialPoint = 0);
-    int32 FindPoint(const FVector2D& TargetPoint, int32 InitialPoint = 0) const;
+    int32 K2_FindPoint(const FVector2D& TargetPoint, int32 InitialPoint = -1);
+    int32 FindPoint(const FVector2D& TargetPoint, int32 InitialPoint = -1) const;
     int32 FindCloser(int32 i, const FVector2D& TargetPoint) const;
 
     // Boundary Utility

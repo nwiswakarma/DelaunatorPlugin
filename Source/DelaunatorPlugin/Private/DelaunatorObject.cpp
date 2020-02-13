@@ -1130,6 +1130,20 @@ int32 UDelaunatorObject::FindPoint(const FVector2D& TargetPoint, int32 InitialPo
         return -1;
     }
 
+    // No valid initial point specified, default to center point
+    if (! Points.IsValidIndex(InitialPoint))
+    {
+        InitialPoint = GetTriangles()[0];
+    }
+
+    // Initial point coincident with target point, return initial point
+    if (TargetPoint.Equals(Points[InitialPoint]))
+    {
+        return InitialPoint;
+    }
+
+    // Find all cell closer to target point
+
     int32 i = InitialPoint;
     int32 c;
 

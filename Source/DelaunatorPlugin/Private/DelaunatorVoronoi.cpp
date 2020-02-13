@@ -328,13 +328,13 @@ void UDelaunatorVoronoi::FindSegmentIntersectCells(
 
         NextIndex = -1;
 
-        for (int32 i=0; i<CellPoints.Num(); ++i)
+        for (int32 ci=0; ci<CellPoints.Num(); ++ci)
         {
             P0 = P1;
-            P1 = CellPoints[i];
+            P1 = CellPoints[ci];
 
             // Skip previous cell
-            if (NeighbourCells[i] == PrevIndex)
+            if (NeighbourCells[ci] == PrevIndex)
             {
                 continue;
             }
@@ -346,7 +346,7 @@ void UDelaunatorVoronoi::FindSegmentIntersectCells(
                 TargetPoint1
                 ) )
             {
-                NextIndex = NeighbourCells[i];
+                NextIndex = NeighbourCells[ci];
                 break;
             }
         }
@@ -360,5 +360,80 @@ void UDelaunatorVoronoi::FindSegmentIntersectCells(
         }
 
         OutCells.Emplace(NextIndex);
+    }
+}
+
+void UDelaunatorVoronoi::FindPolyIntersectCells(
+    TArray<int32>& OutCells,
+    const TArray<FVector2D>& InPoints,
+    int32 InitialPoint
+    ) const
+{
+    OutCells.Reset();
+
+    const int32 PointCount = InPoints.Num();
+
+    if (! IsValidVoronoiObject() ||
+        InPoints.Num() < 3)
+    {
+        return;
+    }
+
+    // Find initial cell
+
+    int32 InitialCell = Delaunator->FindPoint(InPoints[0], InitialPoint);
+
+    // Invalid starting point, abort
+    if (InitialCell < 0)
+    {
+        return;
+    }
+
+    // Find initial target points for either open / closed input poly points
+
+    int32 EndPolyIt = InPoints[0].Equals(InPoints.Last())
+        ? PointCount-1
+        : PointCount;
+
+    FVector2D TargetPoint0;
+    FVector2D TargetPoint1(InPoints[EndPolyIt-1]);
+
+    OutCells.Emplace(InitialCell);
+
+    // Get poly segments intersecting cells
+    for (int32 pi=0; pi<EndPolyIt; ++pi)
+    {
+        TargetPoint0 = TargetPoint1;
+        TargetPoint1 = InPoints[pi];
+
+        // Coincident segment points, skip
+        if ((TargetPoint1-TargetPoint0).SizeSquared() < KINDA_SMALL_NUMBER)
+        {
+            continue;
+        }
+
+        // Find poly segment intersecting cells
+
+        TArray<int32> SegmentCells;
+
+        FindSegmentIntersectCells(
+            SegmentCells,
+            TargetPoint0,
+            TargetPoint1,
+            OutCells.Last()
+            );
+
+        if (SegmentCells.Num() > 0)
+        {
+            // Remove last output cell if it is the same
+            // as the first segment cell
+            if (OutCells.Last() == SegmentCells[0])
+            {
+                OutCells.Pop(false);
+            }
+
+            // Append segment cells as output
+            OutCells.Append(MoveTemp(SegmentCells));
+        }
     }
 }

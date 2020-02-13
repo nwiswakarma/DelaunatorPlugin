@@ -82,14 +82,27 @@ public:
         TArray<int32>& OutCells,
         const FVector2D& TargetPoint0,
         const FVector2D& TargetPoint1,
-        int32 InitialPoint = 0
+        int32 InitialPoint = -1
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Poly Intersect Cells"))
+    void K2_FindPolyIntersectCells(
+        TArray<int32>& OutCells,
+        const TArray<FVector2D>& InPoints,
+        int32 InitialPoint = -1
         );
 
     void FindSegmentIntersectCells(
         TArray<int32>& OutCells,
         const FVector2D& TargetPoint0,
         const FVector2D& TargetPoint1,
-        int32 InitialPoint = 0
+        int32 InitialPoint = -1
+        ) const;
+
+    void FindPolyIntersectCells(
+        TArray<int32>& OutCells,
+        const TArray<FVector2D>& InPoints,
+        int32 InitialPoint = -1
         ) const;
 
     // Value Utility
@@ -168,4 +181,13 @@ FORCEINLINE void UDelaunatorVoronoi::K2_FindSegmentIntersectCells(
         TargetPoint1,
         InitialPoint
         );
+}
+
+FORCEINLINE void UDelaunatorVoronoi::K2_FindPolyIntersectCells(
+    TArray<int32>& OutCells,
+    const TArray<FVector2D>& InPoints,
+    int32 InitialPoint
+    )
+{
+    FindPolyIntersectCells(OutCells, InPoints, InitialPoint);
 }
