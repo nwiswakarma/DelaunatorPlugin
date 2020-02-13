@@ -47,8 +47,9 @@ public:
     int32 GetCellCount() const;
     const TArray<FVector2D>& GetCircumcenters() const;
 
-    void GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex) const;
-    void GetCellPoints(TArray<FVector2D>& OutPoints, TArray<int32>& OutPointIndices, int32 PointIndex) const;
+    void GetCellPoints(TArray<FVector2D>& OutPoints, int32 CellIndex) const;
+    void GetCellPoints(TArray<int32>& OutNeighbourIndices, int32 CellIndex) const;
+    void GetCellPoints(TArray<FVector2D>& OutPoints, TArray<int32>& OutNeighbourIndices, int32 CellIndex) const;
 
     void GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const;
     void GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices) const;
@@ -105,6 +106,10 @@ public:
         int32 InitialPoint = -1
         ) const;
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Cell Within Boundary Cells"))
+    int32 K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells);
+    int32 FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const;
+
     // Value Utility
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
@@ -150,12 +155,18 @@ FORCEINLINE const TArray<FVector2D>& UDelaunatorVoronoi::K2_GetCircumcenters()
 
 FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex)
 {
-    GetCellPoints(OutPoints, PointIndex);
+    if (HasValidDelaunatorObject())
+    {
+        GetCellPoints(OutPoints, PointIndex);
+    }
 }
 
-FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPointsAndNeighbours(TArray<FVector2D>& OutPoints, TArray<int32>& OutPointIndices, int32 PointIndex)
+FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPointsAndNeighbours(TArray<FVector2D>& OutPoints, TArray<int32>& OutNeighbourIndices, int32 PointIndex)
 {
-    GetCellPoints(OutPoints, OutPointIndices, PointIndex);
+    if (HasValidDelaunatorObject())
+    {
+        GetCellPoints(OutPoints, OutNeighbourIndices, PointIndex);
+    }
 }
 
 FORCEINLINE void UDelaunatorVoronoi::K2_GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups)
@@ -166,6 +177,53 @@ FORCEINLINE void UDelaunatorVoronoi::K2_GetAllCellPoints(TArray<FGULVector2DGrou
 FORCEINLINE void UDelaunatorVoronoi::K2_GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices)
 {
     GetCellPointsByPointIndices(OutPointGroups, InPointIndices);
+}
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorVoronoi::GetCellPoints(TArray<int32>& OutNeighbourIndices, int32 CellIndex) const
+{
+    check(HasValidDelaunatorObject());
+    Delaunator->GetPointNeighbours(OutNeighbourIndices, CellIndex);
+}
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, int32 CellIndex) const
+{
+    check(HasValidDelaunatorObject());
+
+    TArray<int32> NeighbourIndices;
+    TArray<int32> NeighbourTriangles;
+
+    Delaunator->GetPointNeighbours(
+        NeighbourIndices,
+        NeighbourTriangles,
+        CellIndex
+        );
+
+    OutPoints.SetNumUninitialized(NeighbourIndices.Num());
+
+    for (int32 i=0; i<NeighbourIndices.Num(); ++i)
+    {
+        OutPoints[i] = Circumcenters[NeighbourTriangles[i]];
+    }
+}
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, TArray<int32>& OutNeighbourIndices, int32 CellIndex) const
+{
+    check(HasValidDelaunatorObject());
+
+    TArray<int32> NeighbourTriangles;
+
+    Delaunator->GetPointNeighbours(
+        OutNeighbourIndices,
+        NeighbourTriangles,
+        CellIndex
+        );
+
+    OutPoints.SetNumUninitialized(OutNeighbourIndices.Num());
+
+    for (int32 i=0; i<OutNeighbourIndices.Num(); ++i)
+    {
+        OutPoints[i] = Circumcenters[NeighbourTriangles[i]];
+    }
 }
 
 FORCEINLINE void UDelaunatorVoronoi::K2_FindSegmentIntersectCells(
@@ -190,4 +248,9 @@ FORCEINLINE void UDelaunatorVoronoi::K2_FindPolyIntersectCells(
     )
 {
     FindPolyIntersectCells(OutCells, InPoints, InitialPoint);
+}
+
+FORCEINLINE int32 UDelaunatorVoronoi::K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells)
+{
+    return FindCellWithinBoundaryCells(InBoundaryCells);
 }

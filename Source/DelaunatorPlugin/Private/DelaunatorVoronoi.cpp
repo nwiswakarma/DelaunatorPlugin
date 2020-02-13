@@ -148,121 +148,36 @@ UDelaunatorValueObject* UDelaunatorVoronoi::CreateDefaultCellValueObject(
     return ValueObject;
 }
 
-void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, int32 PointIndex) const
-{
-    OutPoints.Reset();
-
-    if (! HasValidDelaunatorObject())
-    {
-        return;
-    }
-
-    const TArray<int32>& InTriangles(Delaunator->GetTriangles());
-    const TArray<int32>& InHalfEdges(Delaunator->GetHalfEdges());
-    const TArray<int32>& InInedges(Delaunator->GetInedges());
-
-    const int32 e0 = InInedges[PointIndex];
-
-    // coincident point
-    if (e0 == -1)
-    {
-        return;
-    }
-
-    // Iterate over point triangles
-
-    int32 e = e0;
-    do
-    {
-        const int32 t = e / 3;
-        OutPoints.Emplace(Circumcenters[t]);
-
-        e = ((e%3) == 2) ? e-2 : e+1;
-
-        // Ensure sane triangulation
-        check(PointIndex == InTriangles[e]);
-
-        e = InHalfEdges[e];
-    }
-    while (e != e0 && e != -1);
-}
-
-void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>& OutPoints, TArray<int32>& OutPointIndices, int32 PointIndex) const
-{
-    OutPoints.Reset();
-    OutPointIndices.Reset();
-
-    if (! HasValidDelaunatorObject())
-    {
-        return;
-    }
-
-    const TArray<int32>& InTriangles(Delaunator->GetTriangles());
-    const TArray<int32>& InHalfEdges(Delaunator->GetHalfEdges());
-    const TArray<int32>& InInedges(Delaunator->GetInedges());
-
-    const int32 e0 = InInedges[PointIndex];
-
-    // coincident point
-    if (e0 == -1)
-    {
-        return;
-    }
-
-    // Iterate over point triangles
-
-    int32 e = e0;
-    do
-    {
-        const int32 t = e / 3;
-
-        OutPoints.Emplace(Circumcenters[t]);
-        OutPointIndices.Emplace(InTriangles[e]);
-
-        e = ((e%3) == 2) ? e-2 : e+1;
-
-        // Ensure sane triangulation
-        check(PointIndex == InTriangles[e]);
-
-        e = InHalfEdges[e];
-    }
-    while (e != e0 && e != -1);
-}
-
 void UDelaunatorVoronoi::GetAllCellPoints(TArray<FGULVector2DGroup>& OutPointGroups) const
 {
-    if (! HasValidDelaunatorObject())
+    if (HasValidDelaunatorObject())
     {
-        return;
-    }
+        const int32 PointCount = Delaunator->GetPointCount();
 
-    const int32 PointCount = Delaunator->GetPointCount();
+        OutPointGroups.SetNum(PointCount);
 
-    OutPointGroups.SetNum(PointCount);
-
-    for (int32 i=0; i<PointCount; ++i)
-    {
-        GetCellPoints(OutPointGroups[i].Points, i);
+        for (int32 i=0; i<PointCount; ++i)
+        {
+            GetCellPoints(OutPointGroups[i].Points, i);
+        }
     }
 }
 
 void UDelaunatorVoronoi::GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices) const
 {
-    if (! HasValidDelaunatorObject())
+    if (HasValidDelaunatorObject())
     {
-        return;
-    }
+        const int32 PointCount = InPointIndices.Num();
 
-    const int32 PointCount = InPointIndices.Num();
+        OutPointGroups.SetNum(PointCount);
 
-    OutPointGroups.SetNum(PointCount);
-
-    for (int32 i=0; i<PointCount; ++i)
-    {
-        GetCellPoints(
-            OutPointGroups[i].Points,
-            InPointIndices[i]
-            );
+        for (int32 i=0; i<PointCount; ++i)
+        {
+            GetCellPoints(
+                OutPointGroups[i].Points,
+                InPointIndices[i]
+                );
+        }
     }
 }
 
@@ -373,8 +288,7 @@ void UDelaunatorVoronoi::FindPolyIntersectCells(
 
     const int32 PointCount = InPoints.Num();
 
-    if (! IsValidVoronoiObject() ||
-        InPoints.Num() < 3)
+    if (! IsValidVoronoiObject() || InPoints.Num() < 3)
     {
         return;
     }
@@ -436,4 +350,64 @@ void UDelaunatorVoronoi::FindPolyIntersectCells(
             OutCells.Append(MoveTemp(SegmentCells));
         }
     }
+}
+
+int32 UDelaunatorVoronoi::FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const
+{
+    if (! IsValidVoronoiObject() || InBoundaryCells.Num() < 3)
+    {
+        return -1;
+    }
+
+    const TArray<FVector2D>& InPoints(Delaunator->GetPoints());
+    const TSet<int32> BoundaryCellSet(InBoundaryCells);
+
+    const int32 EndCellIt = InBoundaryCells.Num()-1;
+
+    for (int32 i=1; i<EndCellIt; ++i)
+    {
+        int32 i0 = InBoundaryCells[i-1];
+        int32 i1 = InBoundaryCells[i  ];
+        int32 i2 = InBoundaryCells[i+1];
+
+        // Skip invalid boundary cell index
+        if (! InPoints.IsValidIndex(i0) ||
+            ! InPoints.IsValidIndex(i1) ||
+            ! InPoints.IsValidIndex(i2))
+        {
+            continue;
+        }
+
+        const FVector2D& P0(InPoints[i0]);
+        const FVector2D& P1(InPoints[i1]);
+        const FVector2D& P2(InPoints[i2]);
+
+        const FVector2D D01(-(P1.Y-P0.Y), (P1.X-P0.X));
+        const FVector2D D12(-(P2.Y-P1.Y), (P2.X-P1.X));
+
+        TArray<int32> NeighbourCells;
+        GetCellPoints(NeighbourCells, i1);
+
+        // Find cell neighbour within boundary cells
+        for (int32 ni : NeighbourCells)
+        {
+            // Skip boundary cell
+            if (BoundaryCellSet.Contains(ni))
+            {
+                continue;
+            }
+
+            const FVector2D& PC(InPoints[ni]);
+
+            const FVector2D D0C(PC-P0);
+            const FVector2D D1C(PC-P1);
+
+            if ((D0C|D01) > 0.f && (D1C|D12) > 0.f)
+            {
+                return ni;
+            }
+        }
+    }
+
+    return -1;
 }

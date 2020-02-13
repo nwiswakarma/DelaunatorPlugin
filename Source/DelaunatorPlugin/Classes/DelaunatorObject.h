@@ -111,15 +111,21 @@ public:
 
     int32 GetTrianglePointIndex(int32 InPointIndex) const;
     void GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const;
-    void GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const;
+    void GetPointNeighboursByTrianglePoint(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const;
 
     void GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles) const;
 
     void GetTriangleCircumcenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles) const;
 
+    void GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 PointIndex) const;
+    void GetPointNeighbours(TArray<int32>& OutNeighbourIndices, TArray<int32>& OutNeighbourTriangles, int32 PointIndex) const;
+    void GetPointNeighbours(TArray<FVector2D>& OutPoints, int32 PointIndex) const;
+    void GetPointNeighbours(TArray<int32>& OutNeighbourIndices, TArray<FVector2D>& OutPoints, int32 PointIndex) const;
+
     void GeneratePointsDepthValues(
         UDelaunatorValueObject* ValueObject,
         const TArray<int32>& InitialPoints,
+        int32 StartDepth = 0,
         FDelaunatorCompareCallback CompareCallback = nullptr
         ) const;
 
@@ -168,8 +174,8 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Indices (By Flat Indices)"))
     void K2_GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles);
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Point"))
-    int32 K2_GetTrianglePoint(int32 TrianglePointIndex) const;
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Point By Triangle Point Index"))
+    int32 K2_GetPointByTrianglePointIndex(int32 TrianglePointIndex) const;
 
     // Value Generation
 
@@ -218,6 +224,7 @@ public:
     void K2_GeneratePointsDepthValues(
         UDelaunatorValueObject* ValueObject,
         const TArray<int32>& InitialPoints,
+        int32 StartDepth,
         UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
         );
 
@@ -257,7 +264,7 @@ public:
     void K2_GetPointTriangles(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Point Neighbours"))
-    void K2_GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex);
+    void K2_GetPointNeighboursByTrianglePoint(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex);
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Triangle Centers"))
     void K2_GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles);
@@ -411,8 +418,33 @@ inline void UDelaunatorObject::GetTriangleIndicesFlat(TArray<int32>& OutIndices,
 FORCEINLINE int32 UDelaunatorObject::GetTrianglePointIndex(int32 InPointIndex) const
 {
     return (IsValidDelaunatorObject() && Points.IsValidIndex(InPointIndex))
-        ? GetHalfEdges()[GetInedges()[InPointIndex]]
+        ? GetTriangles()[GetHalfEdges()[GetInedges()[InPointIndex]]]
         : -1;
+}
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorObject::GetPointNeighbours(TArray<FVector2D>& OutPoints, int32 PointIndex) const
+{
+    TArray<int32> NeighbourIndices;
+    GetPointNeighbours(NeighbourIndices, PointIndex);
+
+    OutPoints.SetNumUninitialized(NeighbourIndices.Num());
+
+    for (int32 i=0; i<NeighbourIndices.Num(); ++i)
+    {
+        OutPoints[i] = Points[NeighbourIndices[i]];
+    }
+}
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorObject::GetPointNeighbours(TArray<int32>& OutNeighbourIndices, TArray<FVector2D>& OutPoints, int32 PointIndex) const
+{
+    GetPointNeighbours(OutNeighbourIndices, PointIndex);
+
+    OutPoints.SetNumUninitialized(OutNeighbourIndices.Num());
+
+    for (int32 i=0; i<OutNeighbourIndices.Num(); ++i)
+    {
+        OutPoints[i] = Points[OutNeighbourIndices[i]];
+    }
 }
 
 inline void UDelaunatorObject::GetPointTrianglesNonBoundary(TArray<int32>& OutTriangleIndices, int32 InTrianglePointIndex) const
@@ -520,7 +552,7 @@ FORCEINLINE void UDelaunatorObject::GetPointTriangles(TArray<int32>& OutTriangle
     }
 }
 
-FORCEINLINE void UDelaunatorObject::GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const
+FORCEINLINE void UDelaunatorObject::GetPointNeighboursByTrianglePoint(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex) const
 {
     if (! IsValidDelaunatorObject() ||
         ! GetTriangles().IsValidIndex(InTrianglePointIndex))
@@ -663,10 +695,10 @@ FORCEINLINE void UDelaunatorObject::K2_GetPointTriangles(TArray<int32>& OutTrian
     GetPointTriangles(OutTriangleIndices, InTrianglePointIndex);
 }
 
-FORCEINLINE void UDelaunatorObject::K2_GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex)
+FORCEINLINE void UDelaunatorObject::K2_GetPointNeighboursByTrianglePoint(TArray<int32>& OutNeighbourIndices, int32 InTrianglePointIndex)
 {
     OutNeighbourIndices.Reset();
-    GetPointNeighbours(OutNeighbourIndices, InTrianglePointIndex);
+    GetPointNeighboursByTrianglePoint(OutNeighbourIndices, InTrianglePointIndex);
 }
 
 FORCEINLINE void UDelaunatorObject::K2_GetTriangleCenters(TArray<FVector2D>& OutTriangleCenters, const TArray<int32>& InTargetTriangles)
@@ -709,7 +741,7 @@ inline void UDelaunatorObject::K2_GetTriangleIndicesFlat(TArray<int32>& OutIndic
     OutIndices.Shrink();
 }
 
-FORCEINLINE int32 UDelaunatorObject::K2_GetTrianglePoint(int32 TrianglePointIndex) const
+FORCEINLINE int32 UDelaunatorObject::K2_GetPointByTrianglePointIndex(int32 TrianglePointIndex) const
 {
     if (IsValidDelaunatorObject())
     {
@@ -733,6 +765,7 @@ FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetValueObject(FName Valu
 FORCEINLINE void UDelaunatorObject::K2_GeneratePointsDepthValues(
     UDelaunatorValueObject* ValueObject,
     const TArray<int32>& InitialPoints,
+    int32 StartDepth,
     UDelaunatorCompareOperatorLogic* CompareOperator
     )
 {
@@ -740,10 +773,18 @@ FORCEINLINE void UDelaunatorObject::K2_GeneratePointsDepthValues(
 
     if (IsValid(CompareOperator))
     {
-        CompareCallback = CompareOperator->GetOperator();
+        if (CompareOperator->InitializeOperator(GetPointCount()))
+        {
+            CompareCallback = CompareOperator->GetOperator();
+        }
     }
 
-    GeneratePointsDepthValues(ValueObject, InitialPoints, CompareCallback);
+    GeneratePointsDepthValues(
+        ValueObject,
+        InitialPoints,
+        StartDepth,
+        CompareCallback
+        );
 }
 
 FORCEINLINE void UDelaunatorObject::K2_GenerateTrianglesDepthValues(
@@ -756,7 +797,10 @@ FORCEINLINE void UDelaunatorObject::K2_GenerateTrianglesDepthValues(
 
     if (IsValid(CompareOperator))
     {
-        CompareCallback = CompareOperator->GetOperator();
+        if (CompareOperator->InitializeOperator(GetPointCount()))
+        {
+            CompareCallback = CompareOperator->GetOperator();
+        }
     }
 
     GenerateTrianglesDepthValues(ValueObject, InitialPoints, CompareCallback);

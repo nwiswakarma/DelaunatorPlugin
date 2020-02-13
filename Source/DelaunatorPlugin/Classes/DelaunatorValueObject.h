@@ -42,37 +42,38 @@ enum class EDelaunatorValueType : uint8
     DELVT_Max
 };
 
-template<typename InValueType>
+template<typename InContainerType, typename InValueType>
 class TDelaunatorValueData
 {
 public:
 
-    typedef InValueType ValueType;
+    typedef InContainerType ContainerType;
+    typedef InValueType     ValueType;
 
-    TArray<ValueType> Values;
+    ContainerType Values;
 
-    FORCEINLINE ValueType& GetValue(int32 Index)
-    {
-        return Values[Index];
-    }
+    // Set default values
 
-    FORCEINLINE const ValueType& GetValue(int32 Index) const
-    {
-        return Values[Index];
-    }
-
-    FORCEINLINE void SetValue(const ValueType& Value, int32 Index)
-    {
-        Values[Index] = Value;
-    }
-
-    FORCEINLINE void SetValues(int32 ValueCount)
+    // Array
+    template<typename InputContainerType = ContainerType>
+    FORCEINLINE typename TEnableIf< !TAreTypesEqual<InputContainerType, TBitArray<>>::Value >::Type SetValues(int32 ValueCount)
     {
         Values.Reset(ValueCount);
         Values.SetNumZeroed(ValueCount);
     }
 
-    FORCEINLINE void SetUniformValue(const ValueType& InValue)
+    // Bit Array
+    template<typename InputContainerType = ContainerType>
+    FORCEINLINE typename TEnableIf<  TAreTypesEqual<InputContainerType, TBitArray<>>::Value >::Type SetValues(int32 ValueCount)
+    {
+        Values.Init(false, ValueCount);
+    }
+
+    // Set uniform values
+
+    // Array
+    template<typename InputContainerType = ContainerType>
+    FORCEINLINE typename TEnableIf< !TAreTypesEqual<InputContainerType, TBitArray<>>::Value >::Type SetUniformValue(const ValueType& InValue)
     {
         for (ValueType& Value : Values)
         {
@@ -80,12 +81,22 @@ public:
         }
     }
 
+    // Bit Array
+    template<typename InputContainerType = ContainerType>
+    FORCEINLINE typename TEnableIf<  TAreTypesEqual<InputContainerType, TBitArray<>>::Value >::Type SetUniformValue(const ValueType& InValue)
+    {
+        Values.Init(InValue, Values.Num());
+    }
+
+    // Set values by indices
+
     FORCEINLINE void SetValues(const TArray<int32>& InIndices, const ValueType& InValue)
     {
         for (int32 PointIndex : InIndices)
         {
             Values[PointIndex] = InValue;
         }
+
     }
 };
 
@@ -213,19 +224,71 @@ public:
 };
 
 UCLASS()
-class DELAUNATORPLUGIN_API UDelaunatorIntValueObject : public UDelaunatorValueObject, public TDelaunatorValueData<int32>
+class DELAUNATORPLUGIN_API UDelaunatorBitFlagsValueObject : public UDelaunatorValueObject, public TDelaunatorValueData<TBitArray<>, bool>
 {
     GENERATED_BODY()
 
 public:
 
-    virtual void InitializeValues(int32 ValueCount) override;
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Uniform Value"))
+    void K2_SetUniformValue(bool InValue);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Values By Indices"))
+    void K2_SetValuesByIndices(const TArray<int32>& InIndices, bool InValue);
+
+    FORCEINLINE virtual void InitializeValues(int32 ValueCount) override
+    {
+        SetValues(ValueCount);
+    }
+
+    FORCEINLINE virtual int32 GetElementCount() const override
+    {
+        return Values.Num();
+    }
+
+    FORCEINLINE virtual EDelaunatorValueType GetValueType() const
+    {
+        return EDelaunatorValueType::DELVT_UInt8;
+    }
+
+    FORCEINLINE virtual uint8 GetValueUInt8(int32 Index) const override
+    {
+        return Values[Index] ? 1 : 0;
+    }
+
+    FORCEINLINE virtual int32 GetValueInt32(int32 Index) const override
+    {
+        return Values[Index] ? 1 : 0;
+    }
+
+    FORCEINLINE virtual void SetValueUInt8(int32 Index, uint8 InValue) override
+    {
+        Values[Index] = static_cast<bool>(InValue);
+    }
+
+    FORCEINLINE virtual void SetValueInt32(int32 Index, int32 InValue) override
+    {
+        Values[Index] = static_cast<bool>(InValue);
+    }
+};
+
+UCLASS()
+class DELAUNATORPLUGIN_API UDelaunatorIntValueObject : public UDelaunatorValueObject, public TDelaunatorValueData<TArray<int32>, int32>
+{
+    GENERATED_BODY()
+
+public:
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Uniform Value"))
     void K2_SetUniformValue(int32 InValue);
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Point Values"))
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Values By Indices"))
     void K2_SetValuesByIndices(const TArray<int32>& InIndices, int32 InValue);
+
+    FORCEINLINE virtual void InitializeValues(int32 ValueCount) override
+    {
+        SetValues(ValueCount);
+    }
 
     FORCEINLINE virtual int32 GetElementCount() const override
     {
@@ -259,7 +322,7 @@ public:
 };
 
 UCLASS()
-class DELAUNATORPLUGIN_API UDelaunatorFloatValueObject : public UDelaunatorValueObject, public TDelaunatorValueData<float>
+class DELAUNATORPLUGIN_API UDelaunatorFloatValueObject : public UDelaunatorValueObject, public TDelaunatorValueData<TArray<float>, float>
 {
     GENERATED_BODY()
 
@@ -268,10 +331,13 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Uniform Value"))
     void K2_SetUniformValue(float InValue);
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Point Values"))
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Set Values By Indices"))
     void K2_SetValuesByIndices(const TArray<int32>& InIndices, float InValue);
 
-    virtual void InitializeValues(int32 ValueCount) override;
+    FORCEINLINE virtual void InitializeValues(int32 ValueCount) override
+    {
+        SetValues(ValueCount);
+    }
 
     FORCEINLINE virtual int32 GetElementCount() const override
     {
@@ -294,36 +360,38 @@ public:
     }
 };
 
-// Int Value
+// Blueprint Bit Array Value
 
-FORCEINLINE void UDelaunatorIntValueObject::InitializeValues(int32 ValueCount)
-{
-    SetValues(ValueCount);
-}
-
-FORCEINLINE void UDelaunatorIntValueObject::K2_SetUniformValue(int32 InValue)
+FORCEINLINE_DEBUGGABLE void UDelaunatorBitFlagsValueObject::K2_SetUniformValue(bool InValue)
 {
     SetUniformValue(InValue);
 }
 
-FORCEINLINE void UDelaunatorIntValueObject::K2_SetValuesByIndices(const TArray<int32>& InIndices, int32 InValue)
+FORCEINLINE_DEBUGGABLE void UDelaunatorBitFlagsValueObject::K2_SetValuesByIndices(const TArray<int32>& InIndices, bool InValue)
 {
     SetValues(InIndices, InValue);
 }
 
-// Float Value
+// Blueprint Int Value
 
-FORCEINLINE void UDelaunatorFloatValueObject::InitializeValues(int32 ValueCount)
-{
-    SetValues(ValueCount);
-}
-
-FORCEINLINE void UDelaunatorFloatValueObject::K2_SetUniformValue(float InValue)
+FORCEINLINE_DEBUGGABLE void UDelaunatorIntValueObject::K2_SetUniformValue(int32 InValue)
 {
     SetUniformValue(InValue);
 }
 
-FORCEINLINE void UDelaunatorFloatValueObject::K2_SetValuesByIndices(const TArray<int32>& InIndices, float InValue)
+FORCEINLINE_DEBUGGABLE void UDelaunatorIntValueObject::K2_SetValuesByIndices(const TArray<int32>& InIndices, int32 InValue)
+{
+    SetValues(InIndices, InValue);
+}
+
+// Blueprint Float Value
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorFloatValueObject::K2_SetUniformValue(float InValue)
+{
+    SetUniformValue(InValue);
+}
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorFloatValueObject::K2_SetValuesByIndices(const TArray<int32>& InIndices, float InValue)
 {
     SetValues(InIndices, InValue);
 }

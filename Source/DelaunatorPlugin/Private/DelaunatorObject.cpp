@@ -316,6 +316,84 @@ void UDelaunatorObject::GetTrianglesByEdgeIndices(
     }
 }
 
+void UDelaunatorObject::GetPointNeighbours(TArray<int32>& OutNeighbourIndices, int32 PointIndex) const
+{
+    check(IsValidDelaunatorObject());
+
+    OutNeighbourIndices.Reset();
+
+    const TArray<int32>& InTriangles(GetTriangles());
+    const TArray<int32>& InHalfEdges(GetHalfEdges());
+    const TArray<int32>& InInedges(GetInedges());
+
+    const int32 e0 = InInedges[PointIndex];
+
+    // coincident point, skip
+    if (e0 == -1)
+    {
+        return;
+    }
+
+    // Iterate over point triangles
+
+    int32 e = e0;
+    do
+    {
+        const int32 t = e / 3;
+        const int32 f = t * 3;
+
+        OutNeighbourIndices.Emplace(InTriangles[e]);
+
+        e = ((e-f) < 2) ? e+1 : f;
+
+        // Ensure sane triangulation
+        check(PointIndex == InTriangles[e]);
+
+        e = InHalfEdges[e];
+    }
+    while (e != e0 && e != -1);
+}
+
+void UDelaunatorObject::GetPointNeighbours(TArray<int32>& OutNeighbourIndices, TArray<int32>& OutNeighbourTriangles, int32 PointIndex) const
+{
+    check(IsValidDelaunatorObject());
+
+    OutNeighbourIndices.Reset();
+    OutNeighbourTriangles.Reset();
+
+    const TArray<int32>& InTriangles(GetTriangles());
+    const TArray<int32>& InHalfEdges(GetHalfEdges());
+    const TArray<int32>& InInedges(GetInedges());
+
+    const int32 e0 = InInedges[PointIndex];
+
+    // coincident point, skip
+    if (e0 == -1)
+    {
+        return;
+    }
+
+    // Iterate over point triangles
+
+    int32 e = e0;
+    do
+    {
+        const int32 t = e / 3;
+        const int32 f = t * 3;
+
+        OutNeighbourIndices.Emplace(InTriangles[e]);
+        OutNeighbourTriangles.Emplace(t);
+
+        e = ((e-f) < 2) ? e+1 : f;
+
+        // Ensure sane triangulation
+        check(PointIndex == InTriangles[e]);
+
+        e = InHalfEdges[e];
+    }
+    while (e != e0 && e != -1);
+}
+
 // Boundary Utility
 
 void UDelaunatorObject::GetPointTrianglesBoundary(
@@ -961,6 +1039,7 @@ bool UDelaunatorObject::FindPolyGroupsBoundaryTriangles(
 void UDelaunatorObject::GeneratePointsDepthValues(
     UDelaunatorValueObject* ValueObject,
     const TArray<int32>& InitialPoints,
+    int32 StartDepth,
     FDelaunatorCompareCallback CompareCallback
     ) const
 {
@@ -976,8 +1055,6 @@ void UDelaunatorObject::GeneratePointsDepthValues(
         CompareCallback = [](int32 Index){ return true; };
     }
 
-    const TArray<int32>& InTriangles(GetTriangles());
-
     TQueue<int32> VisitQueue;
     TBitArray<> VisitedSet;
 
@@ -985,56 +1062,33 @@ void UDelaunatorObject::GeneratePointsDepthValues(
 
     for (int32 i : InitialPoints)
     {
-        int32 TriPointIndex = GetTrianglePointIndex(i);
-
-        if (TriPointIndex >= 0 && CompareCallback(i))
+        if (Points.IsValidIndex(i) && CompareCallback(i))
         {
             VisitedSet[i] = true;
-            VisitQueue.Enqueue(TriPointIndex);
-            ValueObject->SetValueInt32(i, 0);
+            VisitQueue.Enqueue(i);
+            ValueObject->SetValueInt32(i, StartDepth);
         }
     }
 
-    TArray<int32> PointTriangles;
+    TArray<int32> NeighbourCells;
 
     while (! VisitQueue.IsEmpty())
     {
-        int32 TriPointIndex;
-        VisitQueue.Dequeue(TriPointIndex);
+        int32 PointIndex;
+        VisitQueue.Dequeue(PointIndex);
 
-        int32 PointIndex = InTriangles[TriPointIndex];
-        int32 Depth = ValueObject->GetValueInt32(PointIndex);
+        int32 NextDepth = ValueObject->GetValueInt32(PointIndex) + 1;
 
-        PointTriangles.Reset();
-        GetPointTriangles(PointTriangles, TriPointIndex);
+        NeighbourCells.Reset();
+        GetPointNeighbours(NeighbourCells, PointIndex);
 
-        for (int32 TriangleIndex : PointTriangles)
+        for (int32 NeighbourCell : NeighbourCells)
         {
-            int32 NextTPI;
-            int32 PrevTPI;
-
-            GetNeighbourTrianglePointIndex(
-                NextTPI,
-                PrevTPI,
-                TriangleIndex,
-                PointIndex
-                );
-
-            int32 NextPointIndex = InTriangles[NextTPI];
-            int32 PrevPointIndex = InTriangles[PrevTPI];
-
-            if (! VisitedSet[NextPointIndex])
+            if (! VisitedSet[NeighbourCell] && CompareCallback(NeighbourCell))
             {
-                VisitedSet[NextPointIndex] = true;
-                VisitQueue.Enqueue(NextTPI);
-                ValueObject->SetValueInt32(NextPointIndex, Depth+1);
-            }
-
-            if (! VisitedSet[PrevPointIndex])
-            {
-                VisitedSet[PrevPointIndex] = true;
-                VisitQueue.Enqueue(PrevTPI);
-                ValueObject->SetValueInt32(PrevPointIndex, Depth+1);
+                VisitedSet[NeighbourCell] = true;
+                VisitQueue.Enqueue(NeighbourCell);
+                ValueObject->SetValueInt32(NeighbourCell, NextDepth);
             }
         }
     }
