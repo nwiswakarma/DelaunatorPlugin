@@ -47,6 +47,13 @@ public:
 
     // Delaunay Utility
 
+    static void PointFillVisit(
+        UDelaunatorObject* Delaunator,
+        int32 InitialPoint,
+        const TBitArray<>* InVisitedFlags = nullptr,
+        TFunction<void(int32)> InVisitCallback = nullptr
+        );
+
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Points Depth Values"))
     static void GeneratePointsDepthValues(
         UDelaunatorObject* Delaunator,

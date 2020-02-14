@@ -79,10 +79,6 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Cell Points By Point Indices"))
     void K2_GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices);
 
-    //UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Cell Within Boundary Cells"))
-    //int32 K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells);
-    //int32 FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const;
-
     // Value Utility
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
@@ -198,8 +194,3 @@ FORCEINLINE_DEBUGGABLE void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>&
         OutPoints[i] = Circumcenters[NeighbourTriangles[i]];
     }
 }
-
-//FORCEINLINE int32 UDelaunatorVoronoi::K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells)
-//{
-//    return FindCellWithinBoundaryCells(InBoundaryCells);
-//}

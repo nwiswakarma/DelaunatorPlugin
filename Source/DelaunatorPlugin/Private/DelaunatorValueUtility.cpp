@@ -29,6 +29,80 @@
 #include "Geom/GULGeometryUtilityLibrary.h"
 #include "Poly/GULPolyUtilityLibrary.h"
 
+void UDelaunatorValueUtility::PointFillVisit(
+    UDelaunatorObject* Delaunator,
+    int32 InitialPoint,
+    const TBitArray<>* InVisitedFlags,
+    TFunction<void(int32)> InVisitCallback
+    )
+{
+    if (! IsValidDelaunay(Delaunator) ||
+        ! Delaunator->GetPoints().IsValidIndex(InitialPoint))
+    {
+        return;
+    }
+
+    const int32 PointCount = Delaunator->GetPointCount();
+
+    // Generate initial visited flags
+
+    TBitArray<> VisitedFlags;
+
+    if (InVisitedFlags && InVisitedFlags->Num() == PointCount)
+    {
+        VisitedFlags = *InVisitedFlags;
+    }
+    else
+    {
+        VisitedFlags.Init(false, PointCount);
+    }
+
+    // Generate visit callback
+
+    TFunction<void(int32)> VisitCallback;
+
+    if (InVisitCallback)
+    {
+        VisitCallback = [&VisitedFlags, &InVisitCallback](int32 Index)
+            {
+                VisitedFlags[Index] = true;
+                InVisitCallback(Index);
+            };
+    }
+    else
+    {
+        VisitCallback = [&VisitedFlags](int32 Index)
+            {
+                VisitedFlags[Index] = true;
+            };
+    }
+
+    TQueue<int32> VisitQueue;
+
+    VisitQueue.Enqueue(InitialPoint);
+    VisitCallback(InitialPoint);
+
+    TArray<int32> NeighbourCells;
+
+    while (! VisitQueue.IsEmpty())
+    {
+        int32 PointIndex;
+        VisitQueue.Dequeue(PointIndex);
+
+        NeighbourCells.Reset();
+        Delaunator->GetPointNeighbours(NeighbourCells, PointIndex);
+
+        for (int32 NeighbourCell : NeighbourCells)
+        {
+            if (! VisitedFlags[NeighbourCell])
+            {
+                VisitQueue.Enqueue(NeighbourCell);
+                VisitCallback(NeighbourCell);
+            }
+        }
+    }
+}
+
 void UDelaunatorValueUtility::GeneratePointsDepthValues(
     UDelaunatorObject* Delaunator,
     UDelaunatorValueObject* ValueObject,
@@ -379,7 +453,8 @@ void UDelaunatorValueUtility::MarkCellsWithinIndexedPolyGroups(
                     ) )
                 {
                     // Point fill cell with marked cells as boundary
-                    Delaunator->PointFillVisit(
+                    PointFillVisit(
+                        Delaunator,
                         NeighbourCell,
                         &MarkedCells,
                         MarkCallback
