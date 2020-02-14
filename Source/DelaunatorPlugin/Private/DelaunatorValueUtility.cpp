@@ -103,10 +103,78 @@ void UDelaunatorValueUtility::PointFillVisit(
     }
 }
 
+void UDelaunatorValueUtility::ExpandPointValueVisit(
+    UDelaunatorObject* Delaunator,
+    const TArray<int32>& InInitialIndices,
+    TFunctionRef<void(int32)> InitialValueCallback,
+    TFunctionRef<bool(int32)> ExpandFilterCallback,
+    TFunctionRef<void(int32,int32)> ExpandValueCallback,
+    const TBitArray<>* InVisitedFlags
+    )
+{
+    if (! IsValidDelaunay(Delaunator))
+    {
+        return;
+    }
+
+    const TArray<FVector2D>& Points(Delaunator->GetPoints());
+    const int32 PointCount = Points.Num();
+
+    // Generate initial visited flags
+
+    TBitArray<> VisitedFlags;
+
+    if (InVisitedFlags && InVisitedFlags->Num() == PointCount)
+    {
+        VisitedFlags = *InVisitedFlags;
+    }
+    else
+    {
+        VisitedFlags.Init(false, PointCount);
+    }
+
+    // Generate initial visit queue
+
+    TQueue<int32> VisitQueue;
+
+    for (int32 i : InInitialIndices)
+    {
+        if (Points.IsValidIndex(i))
+        {
+            VisitedFlags[i] = true;
+            VisitQueue.Enqueue(i);
+            InitialValueCallback(i);
+        }
+    }
+
+    // Expand values
+
+    TArray<int32> NeighbourPoints;
+
+    while (! VisitQueue.IsEmpty())
+    {
+        int32 PointIndex;
+        VisitQueue.Dequeue(PointIndex);
+
+        NeighbourPoints.Reset();
+        Delaunator->GetPointNeighbours(NeighbourPoints, PointIndex);
+
+        for (int32 ni : NeighbourPoints)
+        {
+            if (! VisitedFlags[ni] && ExpandFilterCallback(ni))
+            {
+                VisitedFlags[ni] = true;
+                VisitQueue.Enqueue(ni);
+                ExpandValueCallback(PointIndex, ni);
+            }
+        }
+    }
+}
+
 void UDelaunatorValueUtility::GeneratePointsDepthValues(
     UDelaunatorObject* Delaunator,
     UDelaunatorValueObject* ValueObject,
-    const TArray<int32>& InitialPoints,
+    const TArray<int32>& InInitialPoints,
     int32 StartDepth,
     UDelaunatorCompareOperatorLogic* CompareOperator
     )
@@ -114,6 +182,114 @@ void UDelaunatorValueUtility::GeneratePointsDepthValues(
     if (! IsValid(ValueObject)        ||
         ! IsValidDelaunay(Delaunator) ||
         ! ValueObject->IsValidElementCount(Delaunator->GetPointCount()))
+    {
+        return;
+    }
+
+    const int32 PointCount = Delaunator->GetPointCount();
+
+    FDelaunatorCompareCallback ExpandFilterCallback(nullptr);
+
+    // Get compare callback from compare operator
+    if (IsValid(CompareOperator))
+    {
+        if (CompareOperator->InitializeOperator(PointCount))
+        {
+            ExpandFilterCallback = CompareOperator->GetOperator();
+        }
+    }
+
+    // Invalid compare callback, generate default
+    if (! ExpandFilterCallback)
+    {
+        ExpandFilterCallback = [](int32 Index){ return true; };
+    }
+
+    TFunction<void(int32)> InitialValueCallback(
+        [ValueObject, StartDepth](int32 Index)
+        {
+            ValueObject->SetValueInt32(Index, StartDepth);
+        } );
+
+    TFunction<void(int32,int32)> ExpandValueCallback(
+        [ValueObject, StartDepth](int32 Index, int32 NeighbourIndex)
+        {
+            int32 NextDepth = ValueObject->GetValueInt32(Index) + 1;
+            ValueObject->SetValueInt32(NeighbourIndex, NextDepth);
+        } );
+
+    ExpandPointValueVisit(
+        Delaunator,
+        InInitialPoints,
+        InitialValueCallback,
+        ExpandFilterCallback,
+        ExpandValueCallback
+        );
+}
+
+void UDelaunatorValueUtility::ExpandPointValues(
+    UDelaunatorObject* Delaunator,
+    UDelaunatorValueObject* ValueObject,
+    const TArray<int32>& InInitialPoints,
+    UDelaunatorCompareOperatorLogic* CompareOperator
+    )
+{
+    if (! IsValid(ValueObject)        ||
+        ! IsValidDelaunay(Delaunator) ||
+        ! ValueObject->IsValidElementCount(Delaunator->GetPointCount()))
+    {
+        return;
+    }
+
+    const int32 PointCount = Delaunator->GetPointCount();
+
+    FDelaunatorCompareCallback ExpandFilterCallback(nullptr);
+
+    // Get compare callback from compare operator
+    if (IsValid(CompareOperator))
+    {
+        if (CompareOperator->InitializeOperator(PointCount))
+        {
+            ExpandFilterCallback = CompareOperator->GetOperator();
+        }
+    }
+
+    // Invalid compare callback, generate default
+    if (! ExpandFilterCallback)
+    {
+        ExpandFilterCallback = [](int32 Index){ return true; };
+    }
+
+    TFunction<void(int32,int32)> ExpandValueCallback(
+        [ValueObject](int32 Index, int32 NeighbourIndex)
+        {
+            int32 Value = ValueObject->GetValueInt32(Index);
+            ValueObject->SetValueInt32(NeighbourIndex, Value);
+        } );
+
+    ExpandPointValueVisit(
+        Delaunator,
+        InInitialPoints,
+        [](int32 i){},
+        ExpandFilterCallback,
+        ExpandValueCallback
+        );
+}
+
+void UDelaunatorValueUtility::GetRandomFilteredPointsWithinRadius(
+    UDelaunatorObject* Delaunator,
+    TArray<int32>& OutPointIndices,
+    int32 RandomSeed,
+    const TArray<int32>& InPointIndices,
+    float InRadiusBetweenPoints,
+    int32 MaxOutputCount,
+    UDelaunatorCompareOperatorLogic* CompareOperator
+    )
+{
+    OutPointIndices.Reset();
+
+    if (! IsValidDelaunay(Delaunator) ||
+        InPointIndices.Num() < 1)
     {
         return;
     }
@@ -138,43 +314,51 @@ void UDelaunatorValueUtility::GeneratePointsDepthValues(
         CompareCallback = [](int32 Index){ return true; };
     }
 
-    // Visit initial points
+    TArray<int32> CandidatePointIndices(InPointIndices);
 
-    TQueue<int32> VisitQueue;
-    TBitArray<> VisitedFlags;
+    float FilterRadius = FMath::Max(0.f, InRadiusBetweenPoints);
+    float FilterRadiusSq = FilterRadius*FilterRadius;
 
-    VisitedFlags.Init(false, PointCount);
+    FRandomStream Rand(RandomSeed);
 
-    for (int32 i : InitialPoints)
+    while (CandidatePointIndices.Num() > 0)
     {
-        if (Points.IsValidIndex(i) && CompareCallback(i))
+        int32 RandomIndex = Rand.RandHelper(CandidatePointIndices.Num());
+        int32 CandidatePointIndex = CandidatePointIndices[RandomIndex];
+
+        CandidatePointIndices.RemoveAtSwap(RandomIndex, 1, false);
+
+        // Skip invalid candidate point index
+        if (! Points.IsValidIndex(CandidatePointIndex) ||
+            ! CompareCallback(CandidatePointIndex))
         {
-            VisitedFlags[i] = true;
-            VisitQueue.Enqueue(i);
-            ValueObject->SetValueInt32(i, StartDepth);
+            continue;
         }
-    }
 
-    TArray<int32> NeighbourCells;
+        // Check whether candidate point
+        // is outside of other output points filter radius
 
-    while (! VisitQueue.IsEmpty())
-    {
-        int32 PointIndex;
-        VisitQueue.Dequeue(PointIndex);
+        const FVector2D& CandidatePoint(Points[CandidatePointIndex]);
+        bool bIsValidPoint = true;
 
-        int32 NextDepth = ValueObject->GetValueInt32(PointIndex) + 1;
-
-        NeighbourCells.Reset();
-        Delaunator->GetPointNeighbours(NeighbourCells, PointIndex);
-
-        for (int32 NeighbourCell : NeighbourCells)
+        for (int32 pi : OutPointIndices)
         {
-            if (! VisitedFlags[NeighbourCell] && CompareCallback(NeighbourCell))
+            if ((CandidatePoint-Points[pi]).SizeSquared() < FilterRadiusSq)
             {
-                VisitedFlags[NeighbourCell] = true;
-                VisitQueue.Enqueue(NeighbourCell);
-                ValueObject->SetValueInt32(NeighbourCell, NextDepth);
+                bIsValidPoint = false;
+                break;
             }
+        }
+
+        if (bIsValidPoint)
+        {
+            OutPointIndices.Emplace(CandidatePointIndex);
+        }
+
+        // Max output reached, break
+        if (MaxOutputCount > 0 && OutPointIndices.Num() >= MaxOutputCount)
+        {
+            break;
         }
     }
 }

@@ -54,18 +54,46 @@ public:
         TFunction<void(int32)> InVisitCallback = nullptr
         );
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Points Depth Values"))
+    static void ExpandPointValueVisit(
+        UDelaunatorObject* Delaunator,
+        const TArray<int32>& InInitialIndices,
+        TFunctionRef<void(int32)> InitialValueCallback,
+        TFunctionRef<bool(int32)> ExpandFilterCallback,
+        TFunctionRef<void(int32,int32)> ExpandValueCallback,
+        const TBitArray<>* InVisitedFlags = nullptr
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     static void GeneratePointsDepthValues(
         UDelaunatorObject* Delaunator,
         UDelaunatorValueObject* ValueObject,
-        const TArray<int32>& InitialPoints,
+        const TArray<int32>& InInitialPoints,
         int32 StartDepth,
+        UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void ExpandPointValues(
+        UDelaunatorObject* Delaunator,
+        UDelaunatorValueObject* ValueObject,
+        const TArray<int32>& InInitialPoints,
+        UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GetRandomFilteredPointsWithinRadius(
+        UDelaunatorObject* Delaunator,
+        TArray<int32>& OutPointIndices,
+        int32 RandomSeed,
+        const TArray<int32>& InPointIndices,
+        float InRadiusBetweenPoints = 100.f,
+        int32 MaxOutputCount = 0,
         UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
         );
 
     // Voronoi Utility
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Segment Intersect Cells"))
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     static void FindSegmentIntersectCells(
         UDelaunatorVoronoi* Voronoi,
         TArray<int32>& OutCells,
@@ -74,7 +102,7 @@ public:
         int32 InitialPoint = -1
         );
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Poly Intersect Cells"))
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     static void FindPolyIntersectCells(
         UDelaunatorVoronoi* Voronoi,
         TArray<int32>& OutCells,
@@ -82,7 +110,7 @@ public:
         int32 InitialPoint = -1
         );
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Mark Cells Within Indexed Poly Groups"))
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     static void MarkCellsWithinIndexedPolyGroups(
         UDelaunatorVoronoi* Voronoi,
         UDelaunatorValueObject* ValueObject,
