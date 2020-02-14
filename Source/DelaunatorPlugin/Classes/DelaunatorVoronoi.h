@@ -29,6 +29,7 @@
 #include "CoreMinimal.h"
 #include "DelaunatorObject.h"
 #include "GULTypes.h"
+#include "Poly/GULPolyTypes.h"
 #include "DelaunatorVoronoi.generated.h"
 
 UCLASS(BlueprintType)
@@ -104,6 +105,21 @@ public:
         TArray<int32>& OutCells,
         const TArray<FVector2D>& InPoints,
         int32 InitialPoint = -1
+        ) const;
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Mark Cells Within Indexed Poly Groups"))
+    void K2_MarkCellsWithinIndexedPolyGroups(
+        UDelaunatorValueObject* ValueObject,
+        TArray<FGULIntGroup>& OutBoundaryCellGroups,
+        const TArray<FGULIndexedPolyGroup>& InIndexGroups,
+        const TArray<FGULVector2DGroup>& InPolyGroups
+        );
+
+    void MarkCellsWithinIndexedPolyGroups(
+        UDelaunatorValueObject* ValueObject,
+        TArray<FGULIntGroup>& OutBoundaryCellGroups,
+        const TArray<FGULIndexedPolyGroup>& InIndexGroups,
+        const TArray<FGULVector2DGroup>& InPolyGroups
         ) const;
 
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Cell Within Boundary Cells"))
@@ -248,6 +264,21 @@ FORCEINLINE void UDelaunatorVoronoi::K2_FindPolyIntersectCells(
     )
 {
     FindPolyIntersectCells(OutCells, InPoints, InitialPoint);
+}
+
+FORCEINLINE void UDelaunatorVoronoi::K2_MarkCellsWithinIndexedPolyGroups(
+    UDelaunatorValueObject* ValueObject,
+    TArray<FGULIntGroup>& OutBoundaryCellGroups,
+    const TArray<FGULIndexedPolyGroup>& InIndexGroups,
+    const TArray<FGULVector2DGroup>& InPolyGroups
+    )
+{
+    MarkCellsWithinIndexedPolyGroups(
+        ValueObject,
+        OutBoundaryCellGroups,
+        InIndexGroups,
+        InPolyGroups
+        );
 }
 
 FORCEINLINE int32 UDelaunatorVoronoi::K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells)

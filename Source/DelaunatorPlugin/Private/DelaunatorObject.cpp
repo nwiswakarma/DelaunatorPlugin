@@ -1056,15 +1056,15 @@ void UDelaunatorObject::GeneratePointsDepthValues(
     }
 
     TQueue<int32> VisitQueue;
-    TBitArray<> VisitedSet;
+    TBitArray<> VisitedFlags;
 
-    VisitedSet.Init(false, GetPointCount());
+    VisitedFlags.Init(false, GetPointCount());
 
     for (int32 i : InitialPoints)
     {
         if (Points.IsValidIndex(i) && CompareCallback(i))
         {
-            VisitedSet[i] = true;
+            VisitedFlags[i] = true;
             VisitQueue.Enqueue(i);
             ValueObject->SetValueInt32(i, StartDepth);
         }
@@ -1084,9 +1084,9 @@ void UDelaunatorObject::GeneratePointsDepthValues(
 
         for (int32 NeighbourCell : NeighbourCells)
         {
-            if (! VisitedSet[NeighbourCell] && CompareCallback(NeighbourCell))
+            if (! VisitedFlags[NeighbourCell] && CompareCallback(NeighbourCell))
             {
-                VisitedSet[NeighbourCell] = true;
+                VisitedFlags[NeighbourCell] = true;
                 VisitQueue.Enqueue(NeighbourCell);
                 ValueObject->SetValueInt32(NeighbourCell, NextDepth);
             }
@@ -1113,10 +1113,10 @@ void UDelaunatorObject::GenerateTrianglesDepthValues(
     const int32 TriangleCount = GetTriangleCount();
 
     TQueue<int32> VisitQueue;
-    TBitArray<> VisitedSet;
+    TBitArray<> VisitedFlags;
     TArray<int32> PointTriangles;
 
-    VisitedSet.Init(false, GetTriangleCount());
+    VisitedFlags.Init(false, GetTriangleCount());
 
     for (int32 i : InitialPoints)
     {
@@ -1132,9 +1132,9 @@ void UDelaunatorObject::GenerateTrianglesDepthValues(
 
         for (int32 ti : PointTriangles)
         {
-            if (! VisitedSet[ti])
+            if (! VisitedFlags[ti])
             {
-                VisitedSet[ti] = true;
+                VisitedFlags[ti] = true;
                 VisitQueue.Enqueue(ti);
                 ValueObject->SetValueInt32(ti, 0);
             }
@@ -1155,11 +1155,84 @@ void UDelaunatorObject::GenerateTrianglesDepthValues(
             int32 HalfEdge = InHalfEdges[Corner];
             int32 Triangle = HalfEdge/3;
 
-            if (HalfEdge >= 0 && ! VisitedSet[Triangle])
+            if (HalfEdge >= 0 && ! VisitedFlags[Triangle])
             {
-                VisitedSet[Triangle] = true;
+                VisitedFlags[Triangle] = true;
                 VisitQueue.Enqueue(Triangle);
                 ValueObject->SetValueInt32(Triangle, Depth+1);
+            }
+        }
+    }
+}
+
+void UDelaunatorObject::PointFillVisit(
+    int32 InitialPoint,
+    const TBitArray<>* InVisitedFlags,
+    TFunction<void(int32)> InVisitCallback
+    )
+{
+    if (! IsValidDelaunatorObject() ||
+        ! Points.IsValidIndex(InitialPoint))
+    {
+        return;
+    }
+
+    const int32 PointCount = GetPointCount();
+
+    // Generate initial visited flags
+
+    TBitArray<> VisitedFlags;
+
+    if (InVisitedFlags && InVisitedFlags->Num() == PointCount)
+    {
+        VisitedFlags = *InVisitedFlags;
+    }
+    else
+    {
+        VisitedFlags.Init(false, PointCount);
+    }
+
+    // Generate visit callback
+
+    TFunction<void(int32)> VisitCallback;
+
+    if (InVisitCallback)
+    {
+        VisitCallback = [&VisitedFlags, &InVisitCallback](int32 Index)
+            {
+                VisitedFlags[Index] = true;
+                InVisitCallback(Index);
+            };
+    }
+    else
+    {
+        VisitCallback = [&VisitedFlags](int32 Index)
+            {
+                VisitedFlags[Index] = true;
+            };
+    }
+
+    TQueue<int32> VisitQueue;
+
+    VisitQueue.Enqueue(InitialPoint);
+    VisitCallback(InitialPoint);
+
+    TArray<int32> NeighbourCells;
+
+    while (! VisitQueue.IsEmpty())
+    {
+        int32 PointIndex;
+        VisitQueue.Dequeue(PointIndex);
+
+        NeighbourCells.Reset();
+        GetPointNeighbours(NeighbourCells, PointIndex);
+
+        for (int32 NeighbourCell : NeighbourCells)
+        {
+            if (! VisitedFlags[NeighbourCell])
+            {
+                VisitQueue.Enqueue(NeighbourCell);
+                VisitCallback(NeighbourCell);
             }
         }
     }

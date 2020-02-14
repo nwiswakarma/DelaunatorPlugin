@@ -135,6 +135,12 @@ public:
         FDelaunatorCompareCallback CompareCallback = nullptr
         ) const;
 
+    void PointFillVisit(
+        int32 InitialPoint,
+        const TBitArray<>* InVisitedFlags = nullptr,
+        TFunction<void(int32)> InVisitCallback = nullptr
+        );
+
     UFUNCTION(BlueprintCallable, Category="Delaunator")
     bool IsValidDelaunatorObject() const;
 

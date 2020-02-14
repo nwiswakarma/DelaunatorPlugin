@@ -352,6 +352,113 @@ void UDelaunatorVoronoi::FindPolyIntersectCells(
     }
 }
 
+void UDelaunatorVoronoi::MarkCellsWithinIndexedPolyGroups(
+    UDelaunatorValueObject* ValueObject,
+    TArray<FGULIntGroup>& OutBoundaryCellGroups,
+    const TArray<FGULIndexedPolyGroup>& InIndexGroups,
+    const TArray<FGULVector2DGroup>& InPolyGroups
+    ) const
+{
+    OutBoundaryCellGroups.Reset();
+
+    if (! IsValidVoronoiObject() ||
+        InIndexGroups.Num() < 1  ||
+        InPolyGroups.Num() < 1)
+    {
+        return;
+    }
+
+    const TArray<FVector2D>& Points(Delaunator->GetPoints());
+    const int32 CellCount = Points.Num();
+
+    // Marked cell flags
+    TBitArray<> MarkedCells;
+    MarkedCells.Init(false, CellCount);
+
+    // Get mark cell callback from value object
+
+    TFunction<void(int32)> MarkCallback;
+
+    if (IsValid(ValueObject) &&
+        ValueObject->IsValidElementCount(CellCount))
+    {
+        MarkCallback = [ValueObject, &MarkedCells](int32 Index)
+            {
+                ValueObject->SetValueUInt8(Index, 1);
+                MarkedCells[Index] = true;
+            };
+    }
+    // Value object is invalid, use default mark callback
+    else
+    {
+        MarkCallback = [&MarkedCells](int32 Index)
+            {
+                MarkedCells[Index] = true;
+            };
+    }
+
+    // Generate boundary cells
+
+    const int32 PolyGroupCount = InPolyGroups.Num();
+
+    OutBoundaryCellGroups.Reset(PolyGroupCount);
+    OutBoundaryCellGroups.SetNum(PolyGroupCount);
+
+    for (int32 pgi=0; pgi<PolyGroupCount; ++pgi)
+    {
+        TArray<int32>& BoundaryCells(OutBoundaryCellGroups[pgi].Values);
+
+        FindPolyIntersectCells(BoundaryCells, InPolyGroups[pgi].Points);
+
+        // Mark boundary cells
+        for (int32 BoundaryCell : BoundaryCells)
+        {
+            MarkCallback(BoundaryCell);
+        }
+    }
+
+    // Visit all boundary cell neighbours within indexed poly groups
+
+    for (const FGULIntGroup& BoundaryCellGroup : OutBoundaryCellGroups)
+    {
+        const TArray<int32>& BoundaryCells(BoundaryCellGroup.Values);
+        TArray<int32> NeighbourCells;
+
+        for (int32 BoundaryCell : BoundaryCells)
+        {
+            NeighbourCells.Reset();
+            Delaunator->GetPointNeighbours(NeighbourCells, BoundaryCell);
+
+            for (int32 NeighbourCell : NeighbourCells)
+            {
+                // Skip visited cells
+                if (MarkedCells[NeighbourCell])
+                {
+                    continue;
+                }
+
+                // Mark cell visit without set value on value object
+                MarkedCells[NeighbourCell] = true;
+
+                // Check whether neighbour cell is on poly
+                if (UGULPolyUtilityLibrary::IsPointOnPoly(
+                    Points[NeighbourCell],
+                    InIndexGroups,
+                    InPolyGroups
+                    ) )
+                {
+                    // Point fill cell with marked cells as boundary
+                    Delaunator->PointFillVisit(
+                        NeighbourCell,
+                        &MarkedCells,
+                        MarkCallback
+                        );
+                }
+            }
+        }
+    }
+}
+
 int32 UDelaunatorVoronoi::FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const
 {
     if (! IsValidVoronoiObject() || InBoundaryCells.Num() < 3)
