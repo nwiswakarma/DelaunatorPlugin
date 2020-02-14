@@ -1036,134 +1036,76 @@ bool UDelaunatorObject::FindPolyGroupsBoundaryTriangles(
     return true;
 }
 
-void UDelaunatorObject::GeneratePointsDepthValues(
-    UDelaunatorValueObject* ValueObject,
-    const TArray<int32>& InitialPoints,
-    int32 StartDepth,
-    FDelaunatorCompareCallback CompareCallback
-    ) const
-{
-    if (! IsValidDelaunatorObject() ||
-        ! IsValid(ValueObject)   ||
-        ! ValueObject->IsValidElementCount(GetPointCount()))
-    {
-        return;
-    }
-
-    if (! CompareCallback)
-    {
-        CompareCallback = [](int32 Index){ return true; };
-    }
-
-    TQueue<int32> VisitQueue;
-    TBitArray<> VisitedFlags;
-
-    VisitedFlags.Init(false, GetPointCount());
-
-    for (int32 i : InitialPoints)
-    {
-        if (Points.IsValidIndex(i) && CompareCallback(i))
-        {
-            VisitedFlags[i] = true;
-            VisitQueue.Enqueue(i);
-            ValueObject->SetValueInt32(i, StartDepth);
-        }
-    }
-
-    TArray<int32> NeighbourCells;
-
-    while (! VisitQueue.IsEmpty())
-    {
-        int32 PointIndex;
-        VisitQueue.Dequeue(PointIndex);
-
-        int32 NextDepth = ValueObject->GetValueInt32(PointIndex) + 1;
-
-        NeighbourCells.Reset();
-        GetPointNeighbours(NeighbourCells, PointIndex);
-
-        for (int32 NeighbourCell : NeighbourCells)
-        {
-            if (! VisitedFlags[NeighbourCell] && CompareCallback(NeighbourCell))
-            {
-                VisitedFlags[NeighbourCell] = true;
-                VisitQueue.Enqueue(NeighbourCell);
-                ValueObject->SetValueInt32(NeighbourCell, NextDepth);
-            }
-        }
-    }
-}
-
-void UDelaunatorObject::GenerateTrianglesDepthValues(
-    UDelaunatorValueObject* ValueObject,
-    const TArray<int32>& InitialPoints,
-    FDelaunatorCompareCallback CompareCallback
-    ) const
-{
-    if (! IsValidDelaunatorObject() ||
-        ! IsValid(ValueObject)   ||
-        ! ValueObject->IsValidElementCount(GetTriangleCount()))
-    {
-        return;
-    }
-
-    const TArray<int32>& InTriangles(GetTriangles());
-    const TArray<int32>& InHalfEdges(GetHalfEdges());
-
-    const int32 TriangleCount = GetTriangleCount();
-
-    TQueue<int32> VisitQueue;
-    TBitArray<> VisitedFlags;
-    TArray<int32> PointTriangles;
-
-    VisitedFlags.Init(false, GetTriangleCount());
-
-    for (int32 i : InitialPoints)
-    {
-        int32 TriPointIndex = GetTrianglePointIndex(i);
-
-        // Invalid input point index, skip
-        if (TriPointIndex < 0)
-        {
-            continue;
-        }
-
-        GetPointTriangles(PointTriangles, TriPointIndex);
-
-        for (int32 ti : PointTriangles)
-        {
-            if (! VisitedFlags[ti])
-            {
-                VisitedFlags[ti] = true;
-                VisitQueue.Enqueue(ti);
-                ValueObject->SetValueInt32(ti, 0);
-            }
-        }
-    }
-
-    while (! VisitQueue.IsEmpty())
-    {
-        int32 TriangleIndex;
-        VisitQueue.Dequeue(TriangleIndex);
-
-        int32 Depth = ValueObject->GetValueInt32(TriangleIndex);
-        int32 FlatIndex = TriangleIndex*3;
-
-        for (int32 i=0; i<3; ++i)
-        {
-            int32 Corner = FlatIndex+i;
-            int32 HalfEdge = InHalfEdges[Corner];
-            int32 Triangle = HalfEdge/3;
-
-            if (HalfEdge >= 0 && ! VisitedFlags[Triangle])
-            {
-                VisitedFlags[Triangle] = true;
-                VisitQueue.Enqueue(Triangle);
-                ValueObject->SetValueInt32(Triangle, Depth+1);
-            }
-        }
-    }
-}
+//void UDelaunatorObject::GenerateTrianglesDepthValues(
+//    UDelaunatorValueObject* ValueObject,
+//    const TArray<int32>& InitialPoints,
+//    FDelaunatorCompareCallback CompareCallback
+//    ) const
+//{
+//    if (! IsValidDelaunatorObject() ||
+//        ! IsValid(ValueObject)   ||
+//        ! ValueObject->IsValidElementCount(GetTriangleCount()))
+//    {
+//        return;
+//    }
+//
+//    const TArray<int32>& InTriangles(GetTriangles());
+//    const TArray<int32>& InHalfEdges(GetHalfEdges());
+//
+//    const int32 TriangleCount = GetTriangleCount();
+//
+//    TQueue<int32> VisitQueue;
+//    TBitArray<> VisitedFlags;
+//    TArray<int32> PointTriangles;
+//
+//    VisitedFlags.Init(false, GetTriangleCount());
+//
+//    for (int32 i : InitialPoints)
+//    {
+//        int32 TriPointIndex = GetTrianglePointIndex(i);
+//
+//        // Invalid input point index, skip
+//        if (TriPointIndex < 0)
+//        {
+//            continue;
+//        }
+//
+//        GetPointTriangles(PointTriangles, TriPointIndex);
+//
+//        for (int32 ti : PointTriangles)
+//        {
+//            if (! VisitedFlags[ti])
+//            {
+//                VisitedFlags[ti] = true;
+//                VisitQueue.Enqueue(ti);
+//                ValueObject->SetValueInt32(ti, 0);
+//            }
+//        }
+//    }
+//
+//    while (! VisitQueue.IsEmpty())
+//    {
+//        int32 TriangleIndex;
+//        VisitQueue.Dequeue(TriangleIndex);
+//
+//        int32 Depth = ValueObject->GetValueInt32(TriangleIndex);
+//        int32 FlatIndex = TriangleIndex*3;
+//
+//        for (int32 i=0; i<3; ++i)
+//        {
+//            int32 Corner = FlatIndex+i;
+//            int32 HalfEdge = InHalfEdges[Corner];
+//            int32 Triangle = HalfEdge/3;
+//
+//            if (HalfEdge >= 0 && ! VisitedFlags[Triangle])
+//            {
+//                VisitedFlags[Triangle] = true;
+//                VisitQueue.Enqueue(Triangle);
+//                ValueObject->SetValueInt32(Triangle, Depth+1);
+//            }
+//        }
+//    }
+//}
 
 void UDelaunatorObject::PointFillVisit(
     int32 InitialPoint,

@@ -122,18 +122,11 @@ public:
     void GetPointNeighbours(TArray<FVector2D>& OutPoints, int32 PointIndex) const;
     void GetPointNeighbours(TArray<int32>& OutNeighbourIndices, TArray<FVector2D>& OutPoints, int32 PointIndex) const;
 
-    void GeneratePointsDepthValues(
-        UDelaunatorValueObject* ValueObject,
-        const TArray<int32>& InitialPoints,
-        int32 StartDepth = 0,
-        FDelaunatorCompareCallback CompareCallback = nullptr
-        ) const;
-
-    void GenerateTrianglesDepthValues(
-        UDelaunatorValueObject* ValueObject,
-        const TArray<int32>& InitialPoints,
-        FDelaunatorCompareCallback CompareCallback = nullptr
-        ) const;
+    //void GenerateTrianglesDepthValues(
+    //    UDelaunatorValueObject* ValueObject,
+    //    const TArray<int32>& InitialPoints,
+    //    FDelaunatorCompareCallback CompareCallback = nullptr
+    //    ) const;
 
     void PointFillVisit(
         int32 InitialPoint,
@@ -226,20 +219,12 @@ public:
         UDelaunatorCompareOperator* CompareOperator
         );
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Points Depth Values"))
-    void K2_GeneratePointsDepthValues(
-        UDelaunatorValueObject* ValueObject,
-        const TArray<int32>& InitialPoints,
-        int32 StartDepth,
-        UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
-        );
-
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Triangles Depth Values"))
-    void K2_GenerateTrianglesDepthValues(
-        UDelaunatorValueObject* ValueObject,
-        const TArray<int32>& InitialPoints,
-        UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
-        );
+    //UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Triangles Depth Values"))
+    //void K2_GenerateTrianglesDepthValues(
+    //    UDelaunatorValueObject* ValueObject,
+    //    const TArray<int32>& InitialPoints,
+    //    UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
+    //    );
 
     // Triangles & Points Query
 
@@ -768,49 +753,24 @@ FORCEINLINE UDelaunatorValueObject* UDelaunatorObject::GetValueObject(FName Valu
         : nullptr;
 }
 
-FORCEINLINE void UDelaunatorObject::K2_GeneratePointsDepthValues(
-    UDelaunatorValueObject* ValueObject,
-    const TArray<int32>& InitialPoints,
-    int32 StartDepth,
-    UDelaunatorCompareOperatorLogic* CompareOperator
-    )
-{
-    FDelaunatorCompareCallback CompareCallback(nullptr);
-
-    if (IsValid(CompareOperator))
-    {
-        if (CompareOperator->InitializeOperator(GetPointCount()))
-        {
-            CompareCallback = CompareOperator->GetOperator();
-        }
-    }
-
-    GeneratePointsDepthValues(
-        ValueObject,
-        InitialPoints,
-        StartDepth,
-        CompareCallback
-        );
-}
-
-FORCEINLINE void UDelaunatorObject::K2_GenerateTrianglesDepthValues(
-    UDelaunatorValueObject* ValueObject,
-    const TArray<int32>& InitialPoints,
-    UDelaunatorCompareOperatorLogic* CompareOperator
-    )
-{
-    FDelaunatorCompareCallback CompareCallback(nullptr);
-
-    if (IsValid(CompareOperator))
-    {
-        if (CompareOperator->InitializeOperator(GetPointCount()))
-        {
-            CompareCallback = CompareOperator->GetOperator();
-        }
-    }
-
-    GenerateTrianglesDepthValues(ValueObject, InitialPoints, CompareCallback);
-}
+//FORCEINLINE void UDelaunatorObject::K2_GenerateTrianglesDepthValues(
+//    UDelaunatorValueObject* ValueObject,
+//    const TArray<int32>& InitialPoints,
+//    UDelaunatorCompareOperatorLogic* CompareOperator
+//    )
+//{
+//    FDelaunatorCompareCallback CompareCallback(nullptr);
+//
+//    if (IsValid(CompareOperator))
+//    {
+//        if (CompareOperator->InitializeOperator(GetPointCount()))
+//        {
+//            CompareCallback = CompareOperator->GetOperator();
+//        }
+//    }
+//
+//    GenerateTrianglesDepthValues(ValueObject, InitialPoints, CompareCallback);
+//}
 
 // Internal Utility
 

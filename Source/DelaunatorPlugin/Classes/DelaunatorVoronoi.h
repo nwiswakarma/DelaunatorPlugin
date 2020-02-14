@@ -57,7 +57,7 @@ public:
 
     bool HasValidDelaunatorObject() const;
     bool IsValidVoronoiObject() const;
-    const UDelaunatorObject* GetDelaunay() const;
+    UDelaunatorObject* GetDelaunay() const;
 
     void Update();
     void GenerateFrom(UDelaunatorObject* InDelaunator);
@@ -79,52 +79,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Cell Points By Point Indices"))
     void K2_GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& OutPointGroups, const TArray<int32>& InPointIndices);
 
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Segment Intersect Cells"))
-    void K2_FindSegmentIntersectCells(
-        TArray<int32>& OutCells,
-        const FVector2D& TargetPoint0,
-        const FVector2D& TargetPoint1,
-        int32 InitialPoint = -1
-        );
-
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Poly Intersect Cells"))
-    void K2_FindPolyIntersectCells(
-        TArray<int32>& OutCells,
-        const TArray<FVector2D>& InPoints,
-        int32 InitialPoint = -1
-        );
-
-    void FindSegmentIntersectCells(
-        TArray<int32>& OutCells,
-        const FVector2D& TargetPoint0,
-        const FVector2D& TargetPoint1,
-        int32 InitialPoint = -1
-        ) const;
-
-    void FindPolyIntersectCells(
-        TArray<int32>& OutCells,
-        const TArray<FVector2D>& InPoints,
-        int32 InitialPoint = -1
-        ) const;
-
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Mark Cells Within Indexed Poly Groups"))
-    void K2_MarkCellsWithinIndexedPolyGroups(
-        UDelaunatorValueObject* ValueObject,
-        TArray<FGULIntGroup>& OutBoundaryCellGroups,
-        const TArray<FGULIndexedPolyGroup>& InIndexGroups,
-        const TArray<FGULVector2DGroup>& InPolyGroups
-        );
-
-    void MarkCellsWithinIndexedPolyGroups(
-        UDelaunatorValueObject* ValueObject,
-        TArray<FGULIntGroup>& OutBoundaryCellGroups,
-        const TArray<FGULIndexedPolyGroup>& InIndexGroups,
-        const TArray<FGULVector2DGroup>& InPolyGroups
-        ) const;
-
-    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Cell Within Boundary Cells"))
-    int32 K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells);
-    int32 FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const;
+    //UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Find Cell Within Boundary Cells"))
+    //int32 K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells);
+    //int32 FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const;
 
     // Value Utility
 
@@ -147,7 +104,7 @@ FORCEINLINE bool UDelaunatorVoronoi::IsValidVoronoiObject() const
         && Circumcenters.Num()*3 == Delaunator->GetIndexCount();
 }
 
-FORCEINLINE const UDelaunatorObject* UDelaunatorVoronoi::GetDelaunay() const
+FORCEINLINE UDelaunatorObject* UDelaunatorVoronoi::GetDelaunay() const
 {
     return Delaunator;
 }
@@ -242,46 +199,7 @@ FORCEINLINE_DEBUGGABLE void UDelaunatorVoronoi::GetCellPoints(TArray<FVector2D>&
     }
 }
 
-FORCEINLINE void UDelaunatorVoronoi::K2_FindSegmentIntersectCells(
-    TArray<int32>& OutCells,
-    const FVector2D& TargetPoint0,
-    const FVector2D& TargetPoint1,
-    int32 InitialPoint
-    )
-{
-    FindSegmentIntersectCells(
-        OutCells,
-        TargetPoint0,
-        TargetPoint1,
-        InitialPoint
-        );
-}
-
-FORCEINLINE void UDelaunatorVoronoi::K2_FindPolyIntersectCells(
-    TArray<int32>& OutCells,
-    const TArray<FVector2D>& InPoints,
-    int32 InitialPoint
-    )
-{
-    FindPolyIntersectCells(OutCells, InPoints, InitialPoint);
-}
-
-FORCEINLINE void UDelaunatorVoronoi::K2_MarkCellsWithinIndexedPolyGroups(
-    UDelaunatorValueObject* ValueObject,
-    TArray<FGULIntGroup>& OutBoundaryCellGroups,
-    const TArray<FGULIndexedPolyGroup>& InIndexGroups,
-    const TArray<FGULVector2DGroup>& InPolyGroups
-    )
-{
-    MarkCellsWithinIndexedPolyGroups(
-        ValueObject,
-        OutBoundaryCellGroups,
-        InIndexGroups,
-        InPolyGroups
-        );
-}
-
-FORCEINLINE int32 UDelaunatorVoronoi::K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells)
-{
-    return FindCellWithinBoundaryCells(InBoundaryCells);
-}
+//FORCEINLINE int32 UDelaunatorVoronoi::K2_FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells)
+//{
+//    return FindCellWithinBoundaryCells(InBoundaryCells);
+//}

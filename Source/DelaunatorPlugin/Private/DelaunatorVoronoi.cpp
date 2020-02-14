@@ -181,340 +181,62 @@ void UDelaunatorVoronoi::GetCellPointsByPointIndices(TArray<FGULVector2DGroup>& 
     }
 }
 
-void UDelaunatorVoronoi::FindSegmentIntersectCells(
-    TArray<int32>& OutCells,
-    const FVector2D& TargetPoint0,
-    const FVector2D& TargetPoint1,
-    int32 InitialPoint
-    ) const
-{
-    OutCells.Reset();
-
-    if (! IsValidVoronoiObject())
-    {
-        return;
-    }
-
-    const int32 CellIndex = Delaunator->FindPoint(TargetPoint0, InitialPoint);
-
-    // Invalid starting point, abort
-    if (CellIndex < 0)
-    {
-        return;
-    }
-
-    OutCells.Emplace(CellIndex);
-
-    // Coincident segment points, return
-    if ((TargetPoint1-TargetPoint0).SizeSquared() < KINDA_SMALL_NUMBER)
-    {
-        return;
-    }
-
-    TArray<FVector2D> CellPoints;
-    TArray<int32> NeighbourCells;
-
-    int32 PrevIndex = -1;
-    int32 NextIndex = CellIndex;
-
-    enum { SEARCH_LIMIT = 1000 };
-
-    for (int32 It=0; It<SEARCH_LIMIT; ++It)
-    {
-        CellPoints.Reset();
-        NeighbourCells.Reset();
-
-        // Get cell half-edge segments and corresponding neighbours
-
-        GetCellPoints(CellPoints, NeighbourCells, NextIndex);
-
-        if (CellPoints.Num() < 2)
-        {
-            break;
-        }
-
-        check(CellPoints.Num() == NeighbourCells.Num());
-
-        // Find cell segments intersection towards target point
-
-        FVector2D P0;
-        FVector2D P1 = CellPoints.Last();
-        int32 CurrentIndex = NextIndex;
-
-        NextIndex = -1;
-
-        for (int32 ci=0; ci<CellPoints.Num(); ++ci)
-        {
-            P0 = P1;
-            P1 = CellPoints[ci];
-
-            // Skip previous cell
-            if (NeighbourCells[ci] == PrevIndex)
-            {
-                continue;
-            }
-
-            if (UGULGeometryUtility::SegmentIntersection2DFast(
-                P0,
-                P1,
-                TargetPoint0,
-                TargetPoint1
-                ) )
-            {
-                NextIndex = NeighbourCells[ci];
-                break;
-            }
-        }
-
-        PrevIndex = CurrentIndex;
-
-        // No intersection found, break
-        if (NextIndex < 0)
-        {
-            break;
-        }
-
-        OutCells.Emplace(NextIndex);
-    }
-}
-
-void UDelaunatorVoronoi::FindPolyIntersectCells(
-    TArray<int32>& OutCells,
-    const TArray<FVector2D>& InPoints,
-    int32 InitialPoint
-    ) const
-{
-    OutCells.Reset();
-
-    const int32 PointCount = InPoints.Num();
-
-    if (! IsValidVoronoiObject() || InPoints.Num() < 3)
-    {
-        return;
-    }
-
-    // Find initial cell
-
-    int32 InitialCell = Delaunator->FindPoint(InPoints[0], InitialPoint);
-
-    // Invalid starting point, abort
-    if (InitialCell < 0)
-    {
-        return;
-    }
-
-    // Find initial target points for either open / closed input poly points
-
-    int32 EndPolyIt = InPoints[0].Equals(InPoints.Last())
-        ? PointCount-1
-        : PointCount;
-
-    FVector2D TargetPoint0;
-    FVector2D TargetPoint1(InPoints[EndPolyIt-1]);
-
-    OutCells.Emplace(InitialCell);
-
-    // Get poly segments intersecting cells
-    for (int32 pi=0; pi<EndPolyIt; ++pi)
-    {
-        TargetPoint0 = TargetPoint1;
-        TargetPoint1 = InPoints[pi];
-
-        // Coincident segment points, skip
-        if ((TargetPoint1-TargetPoint0).SizeSquared() < KINDA_SMALL_NUMBER)
-        {
-            continue;
-        }
-
-        // Find poly segment intersecting cells
-
-        TArray<int32> SegmentCells;
-
-        FindSegmentIntersectCells(
-            SegmentCells,
-            TargetPoint0,
-            TargetPoint1,
-            OutCells.Last()
-            );
-
-        if (SegmentCells.Num() > 0)
-        {
-            // Remove last output cell if it is the same
-            // as the first segment cell
-            if (OutCells.Last() == SegmentCells[0])
-            {
-                OutCells.Pop(false);
-            }
-
-            // Append segment cells as output
-            OutCells.Append(MoveTemp(SegmentCells));
-        }
-    }
-}
-
-void UDelaunatorVoronoi::MarkCellsWithinIndexedPolyGroups(
-    UDelaunatorValueObject* ValueObject,
-    TArray<FGULIntGroup>& OutBoundaryCellGroups,
-    const TArray<FGULIndexedPolyGroup>& InIndexGroups,
-    const TArray<FGULVector2DGroup>& InPolyGroups
-    ) const
-{
-    OutBoundaryCellGroups.Reset();
-
-    if (! IsValidVoronoiObject() ||
-        InIndexGroups.Num() < 1  ||
-        InPolyGroups.Num() < 1)
-    {
-        return;
-    }
-
-    const TArray<FVector2D>& Points(Delaunator->GetPoints());
-    const int32 CellCount = Points.Num();
-
-    // Marked cell flags
-    TBitArray<> MarkedCells;
-    MarkedCells.Init(false, CellCount);
-
-    // Get mark cell callback from value object
-
-    TFunction<void(int32)> MarkCallback;
-
-    if (IsValid(ValueObject) &&
-        ValueObject->IsValidElementCount(CellCount))
-    {
-        MarkCallback = [ValueObject, &MarkedCells](int32 Index)
-            {
-                ValueObject->SetValueUInt8(Index, 1);
-                MarkedCells[Index] = true;
-            };
-    }
-    // Value object is invalid, use default mark callback
-    else
-    {
-        MarkCallback = [&MarkedCells](int32 Index)
-            {
-                MarkedCells[Index] = true;
-            };
-    }
-
-    // Generate boundary cells
-
-    const int32 PolyGroupCount = InPolyGroups.Num();
-
-    OutBoundaryCellGroups.Reset(PolyGroupCount);
-    OutBoundaryCellGroups.SetNum(PolyGroupCount);
-
-    for (int32 pgi=0; pgi<PolyGroupCount; ++pgi)
-    {
-        TArray<int32>& BoundaryCells(OutBoundaryCellGroups[pgi].Values);
-
-        FindPolyIntersectCells(BoundaryCells, InPolyGroups[pgi].Points);
-
-        // Mark boundary cells
-        for (int32 BoundaryCell : BoundaryCells)
-        {
-            MarkCallback(BoundaryCell);
-        }
-    }
-
-    // Visit all boundary cell neighbours within indexed poly groups
-
-    for (const FGULIntGroup& BoundaryCellGroup : OutBoundaryCellGroups)
-    {
-        const TArray<int32>& BoundaryCells(BoundaryCellGroup.Values);
-        TArray<int32> NeighbourCells;
-
-        for (int32 BoundaryCell : BoundaryCells)
-        {
-            NeighbourCells.Reset();
-            Delaunator->GetPointNeighbours(NeighbourCells, BoundaryCell);
-
-            for (int32 NeighbourCell : NeighbourCells)
-            {
-                // Skip visited cells
-                if (MarkedCells[NeighbourCell])
-                {
-                    continue;
-                }
-
-                // Mark cell visit without set value on value object
-                MarkedCells[NeighbourCell] = true;
-
-                // Check whether neighbour cell is on poly
-                if (UGULPolyUtilityLibrary::IsPointOnPoly(
-                    Points[NeighbourCell],
-                    InIndexGroups,
-                    InPolyGroups
-                    ) )
-                {
-                    // Point fill cell with marked cells as boundary
-                    Delaunator->PointFillVisit(
-                        NeighbourCell,
-                        &MarkedCells,
-                        MarkCallback
-                        );
-                }
-            }
-        }
-    }
-}
-
-int32 UDelaunatorVoronoi::FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const
-{
-    if (! IsValidVoronoiObject() || InBoundaryCells.Num() < 3)
-    {
-        return -1;
-    }
-
-    const TArray<FVector2D>& InPoints(Delaunator->GetPoints());
-    const TSet<int32> BoundaryCellSet(InBoundaryCells);
-
-    const int32 EndCellIt = InBoundaryCells.Num()-1;
-
-    for (int32 i=1; i<EndCellIt; ++i)
-    {
-        int32 i0 = InBoundaryCells[i-1];
-        int32 i1 = InBoundaryCells[i  ];
-        int32 i2 = InBoundaryCells[i+1];
-
-        // Skip invalid boundary cell index
-        if (! InPoints.IsValidIndex(i0) ||
-            ! InPoints.IsValidIndex(i1) ||
-            ! InPoints.IsValidIndex(i2))
-        {
-            continue;
-        }
-
-        const FVector2D& P0(InPoints[i0]);
-        const FVector2D& P1(InPoints[i1]);
-        const FVector2D& P2(InPoints[i2]);
-
-        const FVector2D D01(-(P1.Y-P0.Y), (P1.X-P0.X));
-        const FVector2D D12(-(P2.Y-P1.Y), (P2.X-P1.X));
-
-        TArray<int32> NeighbourCells;
-        GetCellPoints(NeighbourCells, i1);
-
-        // Find cell neighbour within boundary cells
-        for (int32 ni : NeighbourCells)
-        {
-            // Skip boundary cell
-            if (BoundaryCellSet.Contains(ni))
-            {
-                continue;
-            }
-
-            const FVector2D& PC(InPoints[ni]);
-
-            const FVector2D D0C(PC-P0);
-            const FVector2D D1C(PC-P1);
-
-            if ((D0C|D01) > 0.f && (D1C|D12) > 0.f)
-            {
-                return ni;
-            }
-        }
-    }
-
-    return -1;
-}
+//int32 UDelaunatorVoronoi::FindCellWithinBoundaryCells(const TArray<int32>& InBoundaryCells) const
+//{
+//    if (! IsValidVoronoiObject() || InBoundaryCells.Num() < 3)
+//    {
+//        return -1;
+//    }
+//
+//    const TArray<FVector2D>& InPoints(Delaunator->GetPoints());
+//    const TSet<int32> BoundaryCellSet(InBoundaryCells);
+//
+//    const int32 EndCellIt = InBoundaryCells.Num()-1;
+//
+//    for (int32 i=1; i<EndCellIt; ++i)
+//    {
+//        int32 i0 = InBoundaryCells[i-1];
+//        int32 i1 = InBoundaryCells[i  ];
+//        int32 i2 = InBoundaryCells[i+1];
+//
+//        // Skip invalid boundary cell index
+//        if (! InPoints.IsValidIndex(i0) ||
+//            ! InPoints.IsValidIndex(i1) ||
+//            ! InPoints.IsValidIndex(i2))
+//        {
+//            continue;
+//        }
+//
+//        const FVector2D& P0(InPoints[i0]);
+//        const FVector2D& P1(InPoints[i1]);
+//        const FVector2D& P2(InPoints[i2]);
+//
+//        const FVector2D D01(-(P1.Y-P0.Y), (P1.X-P0.X));
+//        const FVector2D D12(-(P2.Y-P1.Y), (P2.X-P1.X));
+//
+//        TArray<int32> NeighbourCells;
+//        GetCellPoints(NeighbourCells, i1);
+//
+//        // Find cell neighbour within boundary cells
+//        for (int32 ni : NeighbourCells)
+//        {
+//            // Skip boundary cell
+//            if (BoundaryCellSet.Contains(ni))
+//            {
+//                continue;
+//            }
+//
+//            const FVector2D& PC(InPoints[ni]);
+//
+//            const FVector2D D0C(PC-P0);
+//            const FVector2D D1C(PC-P1);
+//
+//            if ((D0C|D01) > 0.f && (D1C|D12) > 0.f)
+//            {
+//                return ni;
+//            }
+//        }
+//    }
+//
+//    return -1;
+//}
