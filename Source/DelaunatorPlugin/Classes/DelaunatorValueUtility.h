@@ -118,6 +118,13 @@ public:
         const TArray<FGULIndexedPolyGroup>& InIndexGroups,
         const TArray<FGULVector2DGroup>& InPolyGroups
         );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GetCellsOuterPoints(
+        UDelaunatorVoronoi* Voronoi,
+        TArray<FVector2D>& OutPoints,
+        const TArray<int32>& InCells
+        );
 };
 
 FORCEINLINE bool UDelaunatorValueUtility::IsValidDelaunay(UDelaunatorObject* Delaunator)

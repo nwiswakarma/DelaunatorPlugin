@@ -648,3 +648,107 @@ void UDelaunatorValueUtility::MarkCellsWithinIndexedPolyGroups(
         }
     }
 }
+
+void UDelaunatorValueUtility::GetCellsOuterPoints(
+    UDelaunatorVoronoi* Voronoi,
+    TArray<FVector2D>& OutPoints,
+    const TArray<int32>& InCells
+    )
+{
+    OutPoints.Reset();
+
+    if (! IsValidVoronoi(Voronoi) ||
+        InCells.Num() < 1)
+    {
+        return;
+    }
+
+    UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
+
+    const TArray<int32>& Triangles(Delaunator->GetTriangles());
+    const TArray<int32>& HalfEdges(Delaunator->GetHalfEdges());
+    const TArray<int32>& Inedges(Delaunator->GetInedges());
+    const TArray<FVector2D>& Circumcenters(Voronoi->GetCircumcenters());
+
+    const int32 CellCount = InCells.Num();
+
+    for (int32 i=0; i<CellCount; ++i)
+    {
+        const int32 i0 = InCells[i];
+        const int32 i1 = InCells[(i+1) % CellCount];
+
+#if 0
+        TArray<int32> NeighbourIndices;
+        TArray<int32> NeighbourTriangles;
+
+        Delaunator->GetPointNeighbours(NeighbourIndices, NeighbourTriangles, i0);
+
+        const int32 nn = NeighbourIndices.Num();
+
+        for (int32 j=0; j<nn; ++j)
+        {
+            int32 ni = NeighbourIndices[j];
+
+            if (ni == i1)
+            {
+                int32 t0 = NeighbourTriangles[j];
+                int32 t1 = NeighbourTriangles[j>0?j-1:nn-1];
+                OutPoints.Emplace(Circumcenters[t0]);
+                OutPoints.Emplace(Circumcenters[t1]);
+                break;
+            }
+        }
+#else
+        const int32 e0 = Inedges[i0];
+
+        // coincident point, skip
+        if (e0 == -1)
+        {
+            continue;
+        }
+
+        // Iterate over point triangles
+
+        int32 e = e0;
+        do
+        {
+            const int32 t = e / 3;
+            const int32 f = t * 3;
+
+            if (Triangles[e] == i1)
+            {
+                const FVector2D& P0(Delaunator->GetPoints()[i0]);
+                const FVector2D& P1(Delaunator->GetPoints()[i1]);
+
+                FVector2D P01 = P1-P0;
+                FVector2D P0T = Circumcenters[t]-P0;
+
+                P01.Set(-P01.Y, P01.X);
+
+                int32 e1 = ((e-f) < 2) ? e+1 : f;
+
+                // Prev point
+                OutPoints.Emplace(Circumcenters[HalfEdges[e ]/3]);
+
+                // Curr point
+                OutPoints.Emplace(Circumcenters[t]);
+
+                // Next point
+                OutPoints.Emplace(Circumcenters[HalfEdges[e1]/3]);
+
+                break;
+            }
+
+            e = ((e-f) < 2) ? e+1 : f;
+
+            // Ensure sane triangulation
+            check(i0 == Triangles[e]);
+
+            e = HalfEdges[e];
+        }
+        while (e != e0 && e != -1);
+#endif
+
+        break;
+    }
+}
