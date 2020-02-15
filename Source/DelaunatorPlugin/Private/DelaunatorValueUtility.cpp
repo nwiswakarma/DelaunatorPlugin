@@ -649,7 +649,7 @@ void UDelaunatorValueUtility::MarkCellsWithinIndexedPolyGroups(
     }
 }
 
-void UDelaunatorValueUtility::GetCellsOuterPoints(
+bool UDelaunatorValueUtility::GetCellsOuterConnections(
     UDelaunatorVoronoi* Voronoi,
     TArray<FVector2D>& OutPoints,
     const TArray<int32>& InCells
@@ -658,9 +658,9 @@ void UDelaunatorValueUtility::GetCellsOuterPoints(
     OutPoints.Reset();
 
     if (! IsValidVoronoi(Voronoi) ||
-        InCells.Num() < 1)
+        InCells.Num() < 3)
     {
-        return;
+        return false;
     }
 
     UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
@@ -672,72 +672,52 @@ void UDelaunatorValueUtility::GetCellsOuterPoints(
 
     const int32 CellCount = InCells.Num();
 
-    for (int32 i=0; i<CellCount; ++i)
+    TArray<FVector2D> CellPoints;
+
+    bool bValidConnectingCells = true;
+    int32 e0 = Inedges[InCells[0]];
+
+    for (int32 i=0; i<(CellCount-1); ++i)
     {
-        const int32 i0 = InCells[i];
-        const int32 i1 = InCells[(i+1) % CellCount];
-
-#if 0
-        TArray<int32> NeighbourIndices;
-        TArray<int32> NeighbourTriangles;
-
-        Delaunator->GetPointNeighbours(NeighbourIndices, NeighbourTriangles, i0);
-
-        const int32 nn = NeighbourIndices.Num();
-
-        for (int32 j=0; j<nn; ++j)
-        {
-            int32 ni = NeighbourIndices[j];
-
-            if (ni == i1)
-            {
-                int32 t0 = NeighbourTriangles[j];
-                int32 t1 = NeighbourTriangles[j>0?j-1:nn-1];
-                OutPoints.Emplace(Circumcenters[t0]);
-                OutPoints.Emplace(Circumcenters[t1]);
-                break;
-            }
-        }
-#else
-        const int32 e0 = Inedges[i0];
-
         // coincident point, skip
         if (e0 == -1)
         {
-            continue;
+            bValidConnectingCells = false;
+            break;
         }
+
+        const int32 i0 = InCells[i  ];
+        const int32 i1 = InCells[i+1];
+
+        CellPoints.Reset();
 
         // Iterate over point triangles
 
+        bool bHasConnection = false;
         int32 e = e0;
         do
         {
             const int32 t = e / 3;
             const int32 f = t * 3;
 
+            // Connection found
             if (Triangles[e] == i1)
             {
-                const FVector2D& P0(Delaunator->GetPoints()[i0]);
-                const FVector2D& P1(Delaunator->GetPoints()[i1]);
+                // Next cell edge connection start at the edge after
+                // the edge with the cells connection
 
-                FVector2D P01 = P1-P0;
-                FVector2D P0T = Circumcenters[t]-P0;
+                int32 ne = HalfEdges[e];
+                int32 nt = ne / 3;
+                int32 nf = nt * 3;
 
-                P01.Set(-P01.Y, P01.X);
+                e0 = HalfEdges[((ne-nf) < 2) ? ne+1 : nf];
 
-                int32 e1 = ((e-f) < 2) ? e+1 : f;
-
-                // Prev point
-                OutPoints.Emplace(Circumcenters[HalfEdges[e ]/3]);
-
-                // Curr point
-                OutPoints.Emplace(Circumcenters[t]);
-
-                // Next point
-                OutPoints.Emplace(Circumcenters[HalfEdges[e1]/3]);
+                bHasConnection = true;
 
                 break;
             }
+
+            CellPoints.Emplace(Circumcenters[t]);
 
             e = ((e-f) < 2) ? e+1 : f;
 
@@ -747,8 +727,179 @@ void UDelaunatorValueUtility::GetCellsOuterPoints(
             e = HalfEdges[e];
         }
         while (e != e0 && e != -1);
-#endif
 
-        break;
+        if (bHasConnection)
+        {
+            // Add connecting cell points
+            if (i > 0)
+            {
+                OutPoints.Append(CellPoints);
+            }
+            // First cell, add only last cell point
+            else
+            {
+                OutPoints.Emplace(CellPoints.Last());
+            }
+        }
+        // No connection, invalid input cells
+        else
+        {
+            bValidConnectingCells = false;
+            break;
+        }
+    }
+
+    // Invalid connecting cells, reset output points
+    if (! bValidConnectingCells)
+    {
+        OutPoints.Empty();
+    }
+
+    return bValidConnectingCells;
+}
+
+void UDelaunatorValueUtility::GetCellsBorders(
+    UDelaunatorVoronoi* Voronoi,
+    TArray<int32>& OutBorderCells,
+    const TArray<int32>& InCells
+    )
+{
+    OutBorderCells.Reset();
+
+    if (! IsValidVoronoi(Voronoi) ||
+        InCells.Num() < 1)
+    {
+        return;
+    }
+
+    UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
+
+    TSet<int32> InputSet(InCells);
+    int32 InitialCell = -1;
+
+    TArray<int32> NeighbourCells;
+
+    // Find initial border cell
+
+    for (int32 i : InCells)
+    {
+        NeighbourCells.Reset();
+        Delaunator->GetPointNeighbours(NeighbourCells, i);
+
+        for (int32 ni : NeighbourCells)
+        {
+            if (! InputSet.Contains(ni))
+            {
+                InitialCell = i;
+                break;
+            }
+        }
+
+        if (InitialCell >= 0)
+        {
+            break;
+        }
+    }
+
+    // No valid cell, abort
+    if (InitialCell < 0)
+    {
+        return;
+    }
+
+    OutBorderCells.Emplace(InitialCell);
+
+    // Find first border connection
+
+    int32 CurrCell = -1;
+
+    {
+        TArray<int32> nc;
+        Delaunator->GetPointNeighbours(nc, InitialCell);
+
+        const int32 ncNum = nc.Num();
+        int32 FirstNonSet = -1;
+
+        for (int32 i=ncNum-1; i>=0; --i)
+        {
+            if (! InputSet.Contains(nc[i]))
+            {
+                FirstNonSet = i;
+                break;
+            }
+        }
+
+        check(FirstNonSet >= 0);
+
+        int32 It = FirstNonSet;
+        do
+        {
+            It = It>0 ? It-1 : ncNum-1;
+
+            int32 c = nc[It];
+
+            if (! InputSet.Contains(c))
+            {
+                continue;
+            }
+
+            TArray<int32> nnc;
+            Delaunator->GetPointNeighbours(nnc, c);
+
+            for (int32 i : nnc)
+            {
+                if (! InputSet.Contains(i))
+                {
+                    CurrCell = c;
+                    break;
+                }
+            }
+        }
+        while (It != FirstNonSet && CurrCell < 0);
+    }
+
+    // No connection, return
+    if (CurrCell < 0)
+    {
+        return;
+    }
+
+    OutBorderCells.Emplace(CurrCell);
+
+    // Search for the remaining border connections
+
+    const int32 SearchLimit = InCells.Num();
+    int32 PrevCell = InitialCell;
+
+    for (int32 It=0; It<SearchLimit && CurrCell != InitialCell; ++It)
+    {
+        NeighbourCells.Reset();
+        Delaunator->GetPointNeighbours(NeighbourCells, CurrCell);
+
+        // Find index of the previous cell
+        int32 PrevIndex = NeighbourCells.Find(PrevCell);
+
+        check(PrevIndex != INDEX_NONE);
+
+        // Assign current cell as the previous for the next iteration
+        PrevCell = CurrCell;
+
+        // Find next border cell
+        int32 NeighbourCellNum = NeighbourCells.Num();
+        int32 i = PrevIndex;
+        do
+        {
+            i = i>0 ? i-1 : NeighbourCellNum-1;
+
+            int32 c = NeighbourCells[i];
+
+            if (InputSet.Contains(c))
+            {
+                OutBorderCells.Emplace(c);
+                CurrCell = c;
+                break;
+            }
+        }
+        while (i != PrevIndex);
     }
 }

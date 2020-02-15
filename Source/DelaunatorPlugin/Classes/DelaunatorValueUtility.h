@@ -120,9 +120,16 @@ public:
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
-    static void GetCellsOuterPoints(
+    static bool GetCellsOuterConnections(
         UDelaunatorVoronoi* Voronoi,
         TArray<FVector2D>& OutPoints,
+        const TArray<int32>& InCells
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GetCellsBorders(
+        UDelaunatorVoronoi* Voronoi,
+        TArray<int32>& OutBorderCells,
         const TArray<int32>& InCells
         );
 };
