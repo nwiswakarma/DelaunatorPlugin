@@ -94,6 +94,14 @@ public:
     // Voronoi Utility
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void FilterCellsByNeighbours(
+        UDelaunatorVoronoi* Voronoi,
+        TArray<int32>& OutCells,
+        const TArray<int32>& InCells,
+        UDelaunatorCompareOperatorLogic* CompareOperator
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     static void FindSegmentIntersectCells(
         UDelaunatorVoronoi* Voronoi,
         TArray<int32>& OutCells,

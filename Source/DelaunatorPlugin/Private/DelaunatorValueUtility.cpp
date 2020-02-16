@@ -363,6 +363,70 @@ void UDelaunatorValueUtility::GetRandomFilteredPointsWithinRadius(
     }
 }
 
+void UDelaunatorValueUtility::FilterCellsByNeighbours(
+    UDelaunatorVoronoi* Voronoi,
+    TArray<int32>& OutCells,
+    const TArray<int32>& InCells,
+    UDelaunatorCompareOperatorLogic* CompareOperator
+    )
+{
+    OutCells.Reset();
+
+    if (! IsValidVoronoi(Voronoi) ||
+        InCells.Num() < 1)
+    {
+        return;
+    }
+
+    UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
+
+    const int32 PointCount = Delaunator->GetPointCount();
+
+    FDelaunatorCompareCallback FilterCallback(nullptr);
+
+    // Get compare callback from compare operator
+    if (IsValid(CompareOperator))
+    {
+        if (CompareOperator->InitializeOperator(PointCount))
+        {
+            FilterCallback = CompareOperator->GetOperator();
+        }
+    }
+
+    if (! FilterCallback)
+    {
+        return;
+    }
+
+    OutCells.Reserve(InCells.Num());
+
+    TArray<int32> NeighbourCells;
+
+    for (int32 Cell : InCells)
+    {
+        NeighbourCells.Reset();
+        Delaunator->GetPointNeighbours(NeighbourCells, Cell);
+
+        bool bHasValidNeighbour = false;
+
+        for (int32 NeighbourCell : NeighbourCells)
+        {
+            if (FilterCallback(NeighbourCell))
+            {
+                bHasValidNeighbour = true;
+                break;
+            }
+        }
+
+        if (bHasValidNeighbour)
+        {
+            OutCells.Emplace(Cell);
+        }
+    }
+
+    OutCells.Shrink();
+}
+
 void UDelaunatorValueUtility::FindSegmentIntersectCells(
     UDelaunatorVoronoi* Voronoi,
     TArray<int32>& OutCells,
@@ -814,15 +878,15 @@ void UDelaunatorValueUtility::GetCellsBorders(
     int32 CurrCell = -1;
 
     {
-        TArray<int32> nc;
-        Delaunator->GetPointNeighbours(nc, InitialCell);
+        NeighbourCells.Reset();
+        Delaunator->GetPointNeighbours(NeighbourCells, InitialCell);
 
-        const int32 ncNum = nc.Num();
+        const int32 NeighbourNum = NeighbourCells.Num();
         int32 FirstNonSet = -1;
 
-        for (int32 i=ncNum-1; i>=0; --i)
+        for (int32 i=NeighbourNum-1; i>=0; --i)
         {
-            if (! InputSet.Contains(nc[i]))
+            if (! InputSet.Contains(NeighbourCells[i]))
             {
                 FirstNonSet = i;
                 break;
@@ -834,9 +898,9 @@ void UDelaunatorValueUtility::GetCellsBorders(
         int32 It = FirstNonSet;
         do
         {
-            It = It>0 ? It-1 : ncNum-1;
+            It = It>0 ? It-1 : NeighbourNum-1;
 
-            int32 c = nc[It];
+            int32 c = NeighbourCells[It];
 
             if (! InputSet.Contains(c))
             {
@@ -864,14 +928,16 @@ void UDelaunatorValueUtility::GetCellsBorders(
         return;
     }
 
+    TArray<int32> CellRoutes({ CurrCell });
+
     OutBorderCells.Emplace(CurrCell);
 
     // Search for the remaining border connections
 
-    const int32 SearchLimit = InCells.Num();
+    const int32 SearchLimit = 100; //InCells.Num();
     int32 PrevCell = InitialCell;
 
-    for (int32 It=0; It<SearchLimit && CurrCell != InitialCell; ++It)
+    for (int32 It=0; It<SearchLimit; ++It)
     {
         NeighbourCells.Reset();
         Delaunator->GetPointNeighbours(NeighbourCells, CurrCell);
@@ -883,6 +949,7 @@ void UDelaunatorValueUtility::GetCellsBorders(
 
         // Assign current cell as the previous for the next iteration
         PrevCell = CurrCell;
+        CurrCell = -1;
 
         // Find next border cell
         int32 NeighbourCellNum = NeighbourCells.Num();
@@ -895,11 +962,35 @@ void UDelaunatorValueUtility::GetCellsBorders(
 
             if (InputSet.Contains(c))
             {
-                OutBorderCells.Emplace(c);
                 CurrCell = c;
                 break;
             }
         }
         while (i != PrevIndex);
+
+        // Valid neighbour cell found
+        if (CurrCell >= 0)
+        {
+            if (PrevCell == InitialCell)
+            {
+                // New cell route, allow loop, add in the cell route list
+                if (CellRoutes.Find(CurrCell) == INDEX_NONE)
+                {
+                    CellRoutes.Emplace(CurrCell);
+                }
+                // Otherwise, break
+                else
+                {
+                    break;
+                }
+            }
+
+            OutBorderCells.Emplace(CurrCell);
+        }
+        // No valid neighbour cell found, break
+        else
+        {
+            break;
+        }
     }
 }
