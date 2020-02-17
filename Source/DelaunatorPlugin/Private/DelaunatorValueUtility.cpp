@@ -838,9 +838,16 @@ void UDelaunatorValueUtility::GetCellsBorders(
 
     UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
 
+    const TArray<int32>& Triangles(Delaunator->GetTriangles());
+    const TArray<int32>& HalfEdges(Delaunator->GetHalfEdges());
+    const TArray<int32>& Inedges(Delaunator->GetInedges());
+
     TSet<int32> InputSet(InCells);
+
+    bool bReverseIt = false;
     int32 InitialCell = -1;
 
+    TArray<int32> BorderCells;
     TArray<int32> NeighbourCells;
 
     // Find initial border cell
@@ -871,8 +878,77 @@ void UDelaunatorValueUtility::GetCellsBorders(
         return;
     }
 
-    OutBorderCells.Emplace(InitialCell);
+    BorderCells.Emplace(InitialCell);
 
+    TArray<int32> CellRoutes;
+    int32 CurrCell = InitialCell;
+
+    //int32 It = 0;
+    //enum { SEARCH_LIMIT = 1000 };
+
+    bool bVisitNewCell = false;
+    int32 e0 = Inedges[InitialCell];
+    int32 e = e0;
+    do
+    {
+        //if (++It >= SEARCH_LIMIT)
+        //{
+        //    break;
+        //}
+
+        // Visit new cell, set new starting edge
+        if (bVisitNewCell)
+        {
+            e0 = e;
+            bVisitNewCell = false;
+        }
+
+        const int32 t = e / 3;
+        const int32 f = t * 3;
+
+        int32 e1 = ((e-f) < 2) ? e+1 : f;
+        int32 e2 = ((e-f) > 0) ? e-1 : f+2;
+
+        int32 i0 = Triangles[e];
+        int32 i2 = Triangles[e2];
+
+        // Neighbour border cell found
+        if (! InputSet.Contains(i0) && InputSet.Contains(i2))
+        {
+            if (Triangles[e1] == InitialCell)
+            {
+                // New cell route
+                if (CellRoutes.Find(i2) == INDEX_NONE)
+                {
+                    CellRoutes.Emplace(i2);
+                }
+                // Already visited route, break
+                else
+                {
+                    break;
+                }
+            }
+
+            BorderCells.Emplace(i2);
+
+            // Move iteration to neighbour border cell
+            e = HalfEdges[e2];
+            CurrCell = i2;
+            bVisitNewCell = true;
+
+            continue;
+        }
+
+        e = e1;
+
+        // Ensure sane triangulation
+        check(CurrCell == Triangles[e]);
+
+        e = HalfEdges[e];
+    }
+    while (e != e0 && e != -1);
+
+#if 0
     // Find first border connection
 
     int32 CurrCell = -1;
@@ -884,7 +960,8 @@ void UDelaunatorValueUtility::GetCellsBorders(
         const int32 NeighbourNum = NeighbourCells.Num();
         int32 FirstNonSet = -1;
 
-        for (int32 i=NeighbourNum-1; i>=0; --i)
+        //for (int32 i=NeighbourNum-1; i>=0; --i)
+        for (int32 i=0; i<NeighbourNum; ++i)
         {
             if (! InputSet.Contains(NeighbourCells[i]))
             {
@@ -898,7 +975,8 @@ void UDelaunatorValueUtility::GetCellsBorders(
         int32 It = FirstNonSet;
         do
         {
-            It = It>0 ? It-1 : NeighbourNum-1;
+            //It = It>0 ? It-1 : NeighbourNum-1;
+            It = It<NeighbourNum ? It+1 : 0;
 
             int32 c = NeighbourCells[It];
 
@@ -907,17 +985,19 @@ void UDelaunatorValueUtility::GetCellsBorders(
                 continue;
             }
 
-            TArray<int32> nnc;
-            Delaunator->GetPointNeighbours(nnc, c);
+            //TArray<int32> nnc;
+            //Delaunator->GetPointNeighbours(nnc, c);
 
-            for (int32 i : nnc)
-            {
-                if (! InputSet.Contains(i))
-                {
-                    CurrCell = c;
-                    break;
-                }
-            }
+            //for (int32 i : nnc)
+            //{
+            //    if (! InputSet.Contains(i))
+            //    {
+            //        CurrCell = c;
+            //        break;
+            //    }
+            //}
+
+            CurrCell = c;
         }
         while (It != FirstNonSet && CurrCell < 0);
     }
@@ -930,14 +1010,16 @@ void UDelaunatorValueUtility::GetCellsBorders(
 
     TArray<int32> CellRoutes({ CurrCell });
 
-    OutBorderCells.Emplace(CurrCell);
+    BorderCells.Emplace(CurrCell);
 
     // Search for the remaining border connections
 
-    const int32 SearchLimit = 100; //InCells.Num();
     int32 PrevCell = InitialCell;
 
-    for (int32 It=0; It<SearchLimit; ++It)
+    //const int32 SearchLimit = InCells.Num();
+    enum { SEARCH_LIMIT = 1000 };
+
+    for (int32 It=0; It<SEARCH_LIMIT; ++It)
     {
         NeighbourCells.Reset();
         Delaunator->GetPointNeighbours(NeighbourCells, CurrCell);
@@ -954,9 +1036,25 @@ void UDelaunatorValueUtility::GetCellsBorders(
         // Find next border cell
         int32 NeighbourCellNum = NeighbourCells.Num();
         int32 i = PrevIndex;
+
+        //i = bReverseIt
+        //    ? (i>0 ? i-1 : NeighbourCellNum-1)
+        //    : (i<NeighbourCellNum ? i+1 : 0);
+
+        //if (InputSet.Contains(NeighbourCells[i]))
+        //{
+        //    UE_LOG(LogTemp,Warning, TEXT("CHECK"));
+        //    bReverseIt = !bReverseIt;
+        //}
+
         do
+        //while (i != PrevIndex)
         {
             i = i>0 ? i-1 : NeighbourCellNum-1;
+
+            //i = bReverseIt
+            //    ? (i>0 ? i-1 : NeighbourCellNum-1)
+            //    : (i<NeighbourCellNum ? i+1 : 0);
 
             int32 c = NeighbourCells[i];
 
@@ -985,12 +1083,111 @@ void UDelaunatorValueUtility::GetCellsBorders(
                 }
             }
 
-            OutBorderCells.Emplace(CurrCell);
+            BorderCells.Emplace(CurrCell);
         }
         // No valid neighbour cell found, break
         else
         {
             break;
         }
+    }
+#endif
+
+    if (CellRoutes.Num() > 1)
+    {
+        OptimizeCellBorders(OutBorderCells, BorderCells);
+    }
+    else
+    {
+        OutBorderCells = BorderCells;
+    }
+}
+
+void UDelaunatorValueUtility::OptimizeCellBorders(TArray<int32>& OutCells, const TArray<int32>& InCells)
+{
+    const int32 CellCount = InCells.Num();
+    const int32 LastCellIndex = CellCount-1;
+
+    // No further optimization required, assign input cells as output and return
+    if (CellCount < 3)
+    {
+        OutCells = InCells;
+        return;
+    }
+
+    // Generate sorted input cells
+    TArray<int32> SortedCells(InCells);
+    SortedCells.Sort();
+
+    // Find cell that have only been visited once
+
+    int32 InitialCell = -1;
+
+    for (int32 c0, c1=SortedCells[0], v=0, i=1; i<CellCount; ++i)
+    {
+        c0 = c1;
+        c1 = SortedCells[i];
+
+        if (c0 != c1)
+        {
+            // c0 has only been visited once
+            if (v == 0)
+            {
+                InitialCell = c0;
+                break;
+            }
+            // Difference on last cell, last cell has only been visited once
+            if (i == LastCellIndex)
+            {
+                InitialCell = c1;
+                break;
+            }
+            else
+            {
+                v = 0;
+            }
+        }
+        else
+        {
+            ++v;
+        }
+    }
+
+    // No cell have only been visited once or initial cell is on the first index,
+    // assign input cells as output and return
+    if (InitialCell < 1)
+    {
+        OutCells = InCells;
+        return;
+    }
+
+    int32 InitialCellIndex = InCells.Find(InitialCell);
+
+    check(InitialCellIndex != INDEX_NONE);
+
+    bool bIsClosed = InCells[0] == InCells.Last();
+    int32 CopyNum = bIsClosed ? CellCount-1 : CellCount;
+
+    OutCells.SetNumUninitialized(CellCount);
+
+    const int32* InData = InCells.GetData();
+    int32* OutData = OutCells.GetData();
+
+    FMemory::Memcpy(
+        OutData,
+        InData+InitialCellIndex,
+        (CopyNum-InitialCellIndex)*InCells.GetTypeSize()
+        );
+
+    FMemory::Memcpy(
+        OutData+(CopyNum-InitialCellIndex),
+        InData,
+        InitialCellIndex*InCells.GetTypeSize()
+        );
+
+    // Copy initial cell as last if input cells have closed connection
+    if (bIsClosed)
+    {
+        OutCells.Last() = InitialCell;
     }
 }

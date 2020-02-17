@@ -45,6 +45,8 @@ class DELAUNATORPLUGIN_API UDelaunatorValueUtility : public UBlueprintFunctionLi
 
 public:
 
+    static void OptimizeCellBorders(TArray<int32>& OutCells, const TArray<int32>& InCells);
+
     // Delaunay Utility
 
     static void PointFillVisit(
