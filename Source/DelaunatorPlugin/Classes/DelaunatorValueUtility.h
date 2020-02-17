@@ -33,6 +33,7 @@
 #include "DelaunatorObject.h"
 #include "DelaunatorValueObject.h"
 #include "DelaunatorVoronoi.h"
+#include "GULTypes.h"
 #include "DelaunatorValueUtility.generated.h"
 
 UCLASS()
@@ -140,6 +141,13 @@ public:
     static void GetCellsBorders(
         UDelaunatorVoronoi* Voronoi,
         TArray<int32>& OutBorderCells,
+        const TArray<int32>& InCells
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GetCellsBorderGroups(
+        UDelaunatorVoronoi* Voronoi,
+        TArray<FGULIntGroup>& OutBorderCellGroups,
         const TArray<int32>& InCells
         );
 };
