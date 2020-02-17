@@ -150,6 +150,14 @@ public:
         TArray<FGULIntGroup>& OutBorderCellGroups,
         const TArray<int32>& InCells
         );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GetCellsBorderEdgesByCompareOperator(
+        UDelaunatorVoronoi* Voronoi,
+        TArray<FGULVector2DGroup>& OutBorderEdgeGroups,
+        const TArray<int32>& InCells,
+        UDelaunatorCompareOperatorLogic* CompareOperator
+        );
 };
 
 FORCEINLINE bool UDelaunatorValueUtility::IsValidDelaunay(UDelaunatorObject* Delaunator)

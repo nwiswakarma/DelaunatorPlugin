@@ -27,6 +27,7 @@
 
 #include "DelaunatorValueUtility.h"
 #include "Geom/GULGeometryUtilityLibrary.h"
+#include "Poly/GULPolyTypes.h"
 #include "Poly/GULPolyUtilityLibrary.h"
 
 void UDelaunatorValueUtility::PointFillVisit(
@@ -1178,6 +1179,116 @@ void UDelaunatorValueUtility::GetCellsBorderGroups(
         else
         {
             OutBorderCells = BorderCells;
+        }
+    }
+}
+
+void UDelaunatorValueUtility::GetCellsBorderEdgesByCompareOperator(
+    UDelaunatorVoronoi* Voronoi,
+    TArray<FGULVector2DGroup>& OutBorderEdgeGroups,
+    const TArray<int32>& InCells,
+    UDelaunatorCompareOperatorLogic* CompareOperator
+    )
+{
+    OutBorderEdgeGroups.Reset();
+
+    if (! IsValidVoronoi(Voronoi) || InCells.Num() < 1)
+    {
+        return;
+    }
+
+    UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
+
+    const TArray<int32>& Triangles(Delaunator->GetTriangles());
+    const TArray<int32>& HalfEdges(Delaunator->GetHalfEdges());
+    const TArray<int32>& Inedges(Delaunator->GetInedges());
+
+    const int32 PointCount = Delaunator->GetPointCount();
+
+    FDelaunatorCompareCallback BorderFilterCallback(nullptr);
+
+    // Get compare callback from compare operator
+    if (IsValid(CompareOperator))
+    {
+        if (CompareOperator->InitializeOperator(PointCount))
+        {
+            BorderFilterCallback = CompareOperator->GetOperator();
+        }
+    }
+
+    // Invalid compare callback, abort
+    if (! BorderFilterCallback)
+    {
+        return;
+    }
+
+    TArray<FGULPolyIndexEdge> Edges;
+    Edges.Reserve(InCells.Num());
+
+    for (int32 Cell : InCells)
+    {
+        const int32 e0 = Inedges[Cell];
+        int32 e = e0;
+        do
+        {
+            const int32 t = e / 3;
+            const int32 f = t * 3;
+
+            int32 e1 = ((e-f) < 2) ? e+1 : f;
+            int32 e2 = ((e-f) > 0) ? e-1 : f+2;
+
+            // Cell is the border against adjacent cell, generate edge
+            if (BorderFilterCallback(Triangles[e2]))
+            {
+                const int32 tn = HalfEdges[e1] / 3;
+
+                FGULPolyIndexEdge Edge;
+
+                if (t < tn)
+                {
+                    Edge.MinIndex = t;
+                    Edge.MaxIndex = tn;
+                }
+                else
+                {
+                    Edge.MinIndex = tn;
+                    Edge.MaxIndex = t;
+                }
+
+                Edges.Emplace(Edge);
+            }
+
+            e = e1;
+
+            // Ensure sane triangulation
+            check(Cell == Triangles[e]);
+
+            e = HalfEdges[e];
+        }
+        while (e != e0 && e != -1);
+    }
+
+    // Generate sorted edge point groups
+
+    const TArray<FVector2D>& Circumcenters(Voronoi->GetCircumcenters());
+
+    TArray<FGULIntGroup> IndexGroups;
+    UGULPolyUtilityLibrary::GenerateSortedEdgeGroups(IndexGroups, Edges, false);
+
+    // Generate output border edge point groups
+
+    OutBorderEdgeGroups.SetNum(IndexGroups.Num());
+
+    for (int32 gi=0; gi<IndexGroups.Num(); ++gi)
+    {
+        const TArray<int32>& Indices(IndexGroups[gi].Values);
+        TArray<FVector2D>& Points(OutBorderEdgeGroups[gi].Points);
+
+        Points.SetNumUninitialized(Indices.Num());
+
+        for (int32 i=0; i<Indices.Num(); ++i)
+        {
+            Points[i] = Circumcenters[Indices[i]];
         }
     }
 }
