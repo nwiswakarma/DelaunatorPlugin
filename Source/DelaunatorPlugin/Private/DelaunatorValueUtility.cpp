@@ -1222,7 +1222,7 @@ void UDelaunatorValueUtility::GetCellsBorderEdgesByCompareOperator(
         return;
     }
 
-    TArray<FGULPolyIndexEdge> Edges;
+    TArray<FGULEdgeIndexPair> Edges;
     Edges.Reserve(InCells.Num());
 
     for (int32 Cell : InCells)
@@ -1237,33 +1237,21 @@ void UDelaunatorValueUtility::GetCellsBorderEdgesByCompareOperator(
             int32 e1 = ((e-f) < 2) ? e+1 : f;
             int32 e2 = ((e-f) > 0) ? e-1 : f+2;
 
-            // Cell is the border against adjacent cell, generate edge
-            if (BorderFilterCallback(Triangles[e2]))
-            {
-                const int32 tn = HalfEdges[e1] / 3;
-
-                FGULPolyIndexEdge Edge;
-
-                if (t < tn)
-                {
-                    Edge.MinIndex = t;
-                    Edge.MaxIndex = tn;
-                }
-                else
-                {
-                    Edge.MinIndex = tn;
-                    Edge.MaxIndex = t;
-                }
-
-                Edges.Emplace(Edge);
-            }
-
             e = e1;
 
             // Ensure sane triangulation
             check(Cell == Triangles[e]);
 
             e = HalfEdges[e];
+
+            // Cell is the border against valid adjacent cell, generate edge
+            if (e != -1 && BorderFilterCallback(Triangles[e2]))
+            {
+                const int32 tn = e / 3;
+                const uint32 t0 = static_cast<uint32>(FMath::Min(t, tn));
+                const uint32 t1 = static_cast<uint32>(FMath::Max(t, tn));
+                Edges.Emplace(t0, t1);
+            }
         }
         while (e != e0 && e != -1);
     }
@@ -1273,7 +1261,12 @@ void UDelaunatorValueUtility::GetCellsBorderEdgesByCompareOperator(
     const TArray<FVector2D>& Circumcenters(Voronoi->GetCircumcenters());
 
     TArray<FGULIntGroup> IndexGroups;
-    UGULPolyUtilityLibrary::GenerateSortedEdgeGroups(IndexGroups, Edges, false);
+
+    UGULPolyUtilityLibrary::GenerateSortedBoundaryEdgeGroups(
+        IndexGroups,
+        Edges,
+        false
+        );
 
     // Generate output border edge point groups
 
