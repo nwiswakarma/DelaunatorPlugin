@@ -38,7 +38,6 @@ class DELAUNATORPLUGIN_API UDelaunatorVoronoi : public UObject
     GENERATED_BODY()
 
     TArray<FVector2D> Circumcenters;
-    TArray<float> HullVectors;
 
     UPROPERTY()
     UDelaunatorObject* Delaunator;
@@ -61,6 +60,9 @@ public:
 
     void Update();
     void GenerateFrom(UDelaunatorObject* InDelaunator);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Update Voronoi"))
+    void K2_Update();
 
     // Query Utility
 
@@ -103,6 +105,11 @@ FORCEINLINE bool UDelaunatorVoronoi::IsValidVoronoiObject() const
 FORCEINLINE UDelaunatorObject* UDelaunatorVoronoi::GetDelaunay() const
 {
     return Delaunator;
+}
+
+FORCEINLINE_DEBUGGABLE void UDelaunatorVoronoi::K2_Update()
+{
+    return Update();
 }
 
 // Query Utility

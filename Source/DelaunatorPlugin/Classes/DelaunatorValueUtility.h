@@ -76,11 +76,35 @@ public:
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GetBorderPoints(
+        UDelaunatorObject* Delaunator,
+        TArray<int32>& OutBorderPoints,
+        const TArray<int32>& InPoints
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void ExpandPoints(
+        UDelaunatorObject* Delaunator,
+        TArray<int32>& OutPoints,
+        TArray<int32>& OutPointCounts,
+        const TArray<int32>& InPoints,
+        int32 ExpandCount = 1
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     static void ExpandPointValues(
         UDelaunatorObject* Delaunator,
         UDelaunatorValueObject* ValueObject,
         const TArray<int32>& InInitialPoints,
         UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void FilterPointsByNeighbours(
+        UDelaunatorObject* Delaunator,
+        TArray<int32>& OutPoints,
+        const TArray<int32>& InPoints,
+        UDelaunatorCompareOperatorLogic* CompareOperator
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
@@ -97,11 +121,12 @@ public:
     // Voronoi Utility
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
-    static void FilterCellsByNeighbours(
+    static void MarkCellsWithinIndexedPolyGroups(
         UDelaunatorVoronoi* Voronoi,
-        TArray<int32>& OutCells,
-        const TArray<int32>& InCells,
-        UDelaunatorCompareOperatorLogic* CompareOperator
+        UDelaunatorValueObject* ValueObject,
+        TArray<FGULIntGroup>& OutBoundaryCellGroups,
+        const TArray<FGULIndexedPolyGroup>& InIndexGroups,
+        const TArray<FGULVector2DGroup>& InPolyGroups
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
@@ -122,15 +147,6 @@ public:
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
-    static void MarkCellsWithinIndexedPolyGroups(
-        UDelaunatorVoronoi* Voronoi,
-        UDelaunatorValueObject* ValueObject,
-        TArray<FGULIntGroup>& OutBoundaryCellGroups,
-        const TArray<FGULIndexedPolyGroup>& InIndexGroups,
-        const TArray<FGULVector2DGroup>& InPolyGroups
-        );
-
-    UFUNCTION(BlueprintCallable, Category="Delaunator")
     static bool GetCellsOuterConnections(
         UDelaunatorVoronoi* Voronoi,
         TArray<FVector2D>& OutPoints,
@@ -138,7 +154,7 @@ public:
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
-    static void GetCellsBorders(
+    static void GetCellsBordersSorted(
         UDelaunatorVoronoi* Voronoi,
         TArray<int32>& OutBorderCells,
         const TArray<int32>& InCells

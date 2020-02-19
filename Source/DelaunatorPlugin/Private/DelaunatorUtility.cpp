@@ -84,33 +84,66 @@ void UDelaunatorUtility::GenerateDelaunatorIndices(TArray<int32>& OutTriangles, 
 void UDelaunatorUtility::GenerateJitteredGridPoints(
     TArray<FVector2D>& OutPoints,
     int32& OutBoundaryPointOffset,
-    FBox2D Bounds,
+    FBox2D InBounds,
     float MaxDeviation,
-    int32 CellCountPerDimension
+    int32 CellCountPerDimension,
+    int32 ExpansionCount
     )
 {
     OutPoints.Reset();
 
     if (CellCountPerDimension < 1   ||
-        Bounds.Max.X < Bounds.Min.X ||
-        Bounds.Max.Y < Bounds.Min.Y)
+        InBounds.Max.X < InBounds.Min.X ||
+        InBounds.Max.Y < InBounds.Min.Y)
     {
         return;
     }
 
+    FBox2D Bounds(InBounds);
     float OX = Bounds.Min.X;
     float OY = Bounds.Min.Y;
     float BoundsW = Bounds.Max.X - Bounds.Min.X;
     float BoundsH = Bounds.Max.Y - Bounds.Min.Y;
+    float Spacing;
 
-    // Generate 10k points for each densityInput point
-    const int32 TargetCellCount = CellCountPerDimension * CellCountPerDimension;
-    // Spacing between points before jittering
-    const float Spacing = 
-        UGULMathLibrary::ScalePrecision( FMath::Sqrt(
-            static_cast<float>(BoundsW*BoundsH) /
-            static_cast<float>(TargetCellCount)
+    if (ExpansionCount > 0)
+    {
+        int32 TargetCellCount = CellCountPerDimension * CellCountPerDimension;
+
+        // Initial spacing between points before jittering
+        Spacing = UGULMathLibrary::ScalePrecision(
+            FMath::Sqrt(
+                BoundsW*BoundsH / static_cast<float>(TargetCellCount)
             ) );
+
+        // Expand dimension
+
+        Bounds += Bounds.ExpandBy(Spacing*ExpansionCount);
+
+        OX = Bounds.Min.X;
+        OY = Bounds.Min.Y;
+        BoundsW = Bounds.Max.X - Bounds.Min.X;
+        BoundsH = Bounds.Max.Y - Bounds.Min.Y;
+
+        int32 n = CellCountPerDimension+ExpansionCount;
+        int32 ExpandCellCount = n*n;
+
+        // Spacing between points before jittering
+        Spacing = UGULMathLibrary::ScalePrecision(
+            FMath::Sqrt(
+                BoundsW*BoundsH / static_cast<float>(ExpandCellCount)
+            ) );
+    }
+    else
+    {
+        int32 TargetCellCount = CellCountPerDimension * CellCountPerDimension;
+
+        // Spacing between points before jittering
+        Spacing = UGULMathLibrary::ScalePrecision(
+            FMath::Sqrt(
+                BoundsW*BoundsH / static_cast<float>(TargetCellCount)
+            ) );
+    }
 
     if (Spacing < KINDA_SMALL_NUMBER)
     {
@@ -178,12 +211,156 @@ void UDelaunatorUtility::GenerateJitteredGridPoints(
         }
     }
 
-    OutPoints.Reset(BoundaryPoints.Num()+JitteredPoints.Num());
+    OutBoundaryPointOffset = JitteredPoints.Num();
+
+    OutPoints.Reset(JitteredPoints.Num()+BoundaryPoints.Num());
     OutPoints.Append(MoveTemp(JitteredPoints));
     OutPoints.Append(MoveTemp(BoundaryPoints));
+}
+
+void UDelaunatorUtility::GenerateJitteredGridPointsUniform(
+    TArray<FVector2D>& OutPoints,
+    int32& OutBoundaryPointOffset,
+    FBox2D InBounds,
+    float MaxDeviation,
+    int32 CellCountPerDimension,
+    int32 ExpansionCount
+    )
+{
+    checkf(false, TEXT("NO IMPLEMENTATION"));
+
+#if 0
+    OutPoints.Reset();
+
+    if (CellCountPerDimension < 1   ||
+        InBounds.Max.X < InBounds.Min.X ||
+        InBounds.Max.Y < InBounds.Min.Y)
+    {
+        return;
+    }
+
+    FBox2D Bounds(InBounds);
+    float OX = Bounds.Min.X;
+    float OY = Bounds.Min.Y;
+    float BoundsW = Bounds.Max.X - Bounds.Min.X;
+    float BoundsH = Bounds.Max.Y - Bounds.Min.Y;
+    float SpacingX;
+    float SpacingY;
+
+    if (ExpansionCount > 0)
+    {
+        int32 TargetCellCount = CellCountPerDimension * CellCountPerDimension;
+        float CountF = static_cast<float>(CellCountPerDimension);
+
+        // Initial spacing between points before jittering
+        SpacingX = UGULMathLibrary::ScalePrecision(BoundsW/CountF);
+        SpacingY = UGULMathLibrary::ScalePrecision(BoundsH/CountF);
+
+        // Expand dimension
+
+        FVector2D Expansion(SpacingX*ExpansionCount, SpacingY*ExpansionCount);
+        Bounds.Min -= Expansion;
+        Bounds.Max += Expansion;
+
+        OX = Bounds.Min.X;
+        OY = Bounds.Min.Y;
+        BoundsW = Bounds.Max.X - Bounds.Min.X;
+        BoundsH = Bounds.Max.Y - Bounds.Min.Y;
+
+        float ExpandCountF = static_cast<float>(CellCountPerDimension+ExpansionCount);
+
+        // Spacing between points before jittering
+        SpacingX = UGULMathLibrary::ScalePrecision(BoundsW/ExpandCountF);
+        SpacingY = UGULMathLibrary::ScalePrecision(BoundsH/ExpandCountF);
+    }
+    else
+    {
+        int32 TargetCellCount = CellCountPerDimension * CellCountPerDimension;
+        float CountF = static_cast<float>(CellCountPerDimension);
+
+        // Initial spacing between points before jittering
+        SpacingX = UGULMathLibrary::ScalePrecision(BoundsW/CountF);
+        SpacingY = UGULMathLibrary::ScalePrecision(BoundsH/CountF);
+    }
+
+    if (SpacingX < KINDA_SMALL_NUMBER || SpacingY < KINDA_SMALL_NUMBER)
+    {
+        return;
+    }
+
+    // Generate boundary points
+    TArray<FVector2D> BoundaryPoints;
+    {
+        const int32 OffsetX = FMath::RoundToInt(-1*SpacingX);
+        const int32 OffsetY = FMath::RoundToInt(-1*SpacingY);
+        const float w = BoundsW - OffsetX * 2;
+        const float h = BoundsH - OffsetY * 2;
+        const int32 NumX = FMath::CeilToInt(w / (SpacingX*2.f)) - 1;
+        const int32 NumY = FMath::CeilToInt(h / (SpacingY*2.f)) - 1;
+        const float InvNumX = 1.f/NumX;
+        const float InvNumY = 1.f/NumY;
+
+        BoundaryPoints.Reserve((NumX+NumY)*2);
+
+        for (int32 i=0; i<NumX; ++i)
+        {
+            float x = OffsetX + w*(i+.5f) * InvNumX;
+            BoundaryPoints.Emplace(OX + x       , OY + OffsetY  );
+            BoundaryPoints.Emplace(OX + x       , OY + OffsetY+h);
+        }
+
+        for (int32 i=0; i<NumY; ++i)
+        {
+            float y = OffsetY + h*(i+.5f) * InvNumY;
+            BoundaryPoints.Emplace(OX + OffsetX  , OY + y);
+            BoundaryPoints.Emplace(OX + OffsetX+w, OY + y);
+        }
+    }
+
+    // Generate jittered points
+    TArray<FVector2D> JitteredPoints;
+    {
+        FRandomStream Rand(0);
+        // Cell radius
+        const float RadiusX = SpacingX / 2.f;
+        const float RadiusY = SpacingY / 2.f;
+        // Jitter value
+        const float JitterAmountX = RadiusX * MaxDeviation;
+        const float JitterAmountY = RadiusY * MaxDeviation;
+        const auto GetJitterX(
+            [&Rand, JitterAmountX]()
+            {
+                return Rand.GetFraction() * 2 * JitterAmountX - JitterAmountX;
+            } );
+        const auto GetJitterY(
+            [&Rand, JitterAmountY]()
+            {
+                return Rand.GetFraction() * 2 * JitterAmountY - JitterAmountY;
+            } );
+
+        JitteredPoints.Reserve(BoundsW*BoundsH);
+
+        for (float y=RadiusY; y<BoundsH; y+=SpacingX)
+        for (float x=RadiusX; x<BoundsW; x+=SpacingY)
+        {
+            const float px = FMath::Min(
+                UGULMathLibrary::ScalePrecision(x+GetJitterX()),
+                BoundsW
+                );
+
+            const float py = FMath::Min(
+                UGULMathLibrary::ScalePrecision(y+GetJitterY()),
+                BoundsH
+                );
+
+            JitteredPoints.Emplace(OX+px, OY+py);
+        }
+    }
 
     OutBoundaryPointOffset = JitteredPoints.Num();
 
-    //grid.cellsX = Math.floor((graphWidth + 0.5 * Spacing) / Spacing);
-    //grid.cellsY = Math.floor((graphHeight + 0.5 * Spacing) / Spacing);
+    OutPoints.Reset(JitteredPoints.Num()+BoundaryPoints.Num());
+    OutPoints.Append(MoveTemp(JitteredPoints));
+    OutPoints.Append(MoveTemp(BoundaryPoints));
+#endif
 }

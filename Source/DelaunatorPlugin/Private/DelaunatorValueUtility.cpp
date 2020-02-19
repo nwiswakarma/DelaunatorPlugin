@@ -228,6 +228,151 @@ void UDelaunatorValueUtility::GeneratePointsDepthValues(
         );
 }
 
+void UDelaunatorValueUtility::GetBorderPoints(
+    UDelaunatorObject* Delaunator,
+    TArray<int32>& OutBorderPoints,
+    const TArray<int32>& InPoints
+    )
+{
+    OutBorderPoints.Reset();
+
+    if (! IsValidDelaunay(Delaunator) || InPoints.Num() < 1)
+    {
+        return;
+    }
+
+    const TArray<int32>& Triangles(Delaunator->GetTriangles());
+    const TArray<int32>& HalfEdges(Delaunator->GetHalfEdges());
+    const TArray<int32>& Inedges(Delaunator->GetInedges());
+
+    TSet<int32> InputSet(InPoints);
+
+    // Find initial border cell
+
+    for (int32 i : InPoints)
+    {
+        const int32 e0 = Inedges[i];
+
+        // coincident point, skip
+        if (e0 == -1)
+        {
+            return;
+        }
+
+        // Iterate over point triangles
+
+        int32 e = e0;
+        do
+        {
+            const int32 t = e / 3;
+            const int32 f = t * 3;
+
+            // Non-input neighbour cell found,
+            // add current cell as border cell and break
+            if (! InputSet.Contains(Triangles[e]))
+            {
+                OutBorderPoints.Emplace(i);
+                break;
+            }
+
+            e = ((e-f) < 2) ? e+1 : f;
+
+            // Ensure sane triangulation
+            check(i == Triangles[e]);
+
+            e = HalfEdges[e];
+        }
+        while (e != e0 && e != -1);
+    }
+}
+
+void UDelaunatorValueUtility::ExpandPoints(
+    UDelaunatorObject* Delaunator,
+    TArray<int32>& OutPoints,
+    TArray<int32>& OutPointCounts,
+    const TArray<int32>& InPoints,
+    int32 ExpandCount
+    )
+{
+    OutPoints.Reset();
+    OutPointCounts.Reset();
+
+    if (! IsValidDelaunay(Delaunator) || InPoints.Num() < 1 || ExpandCount < 1)
+    {
+        OutPoints = InPoints;
+        OutPointCounts.Emplace(InPoints.Num());
+        return;
+    }
+
+    const TArray<int32>& Triangles(Delaunator->GetTriangles());
+    const TArray<int32>& HalfEdges(Delaunator->GetHalfEdges());
+    const TArray<int32>& Inedges(Delaunator->GetInedges());
+
+    TSet<int32> ActiveSet(InPoints);
+    TSet<int32> FilterSet(ActiveSet);
+    TSet<int32> ExpandSet;
+
+    OutPoints = InPoints;
+
+    OutPointCounts.SetNumUninitialized(ExpandCount+1);
+    OutPointCounts[0] = OutPoints.Num();
+
+    // Expand cells
+
+    for (int32 It=0; It<ExpandCount; ++It)
+    {
+        // Expand current active set
+        for (int32 i : ActiveSet)
+        {
+            const int32 e0 = Inedges[i];
+
+            // coincident point, skip
+            if (e0 == -1)
+            {
+                return;
+            }
+
+            // Iterate over point triangles
+
+            int32 e = e0;
+            do
+            {
+                const int32 t = e / 3;
+                const int32 f = t * 3;
+                const int32 c = Triangles[e];
+
+                // Non-input neighbour cell found, add to expansion set
+                if (! FilterSet.Contains(c))
+                {
+                    ExpandSet.Emplace(c);
+                }
+
+                e = ((e-f) < 2) ? e+1 : f;
+
+                // Ensure sane triangulation
+                check(i == Triangles[e]);
+
+                e = HalfEdges[e];
+            }
+            while (e != e0 && e != -1);
+        }
+
+        // Add point index offset
+        OutPointCounts[It+1] = ExpandSet.Num();
+
+        // Add expansion cells as output
+        OutPoints.Append(ExpandSet.Array());
+
+        // Generate set for next iteration
+        if ((It+1) < ExpandCount)
+        {
+            ActiveSet = ExpandSet;
+            FilterSet.Append(ExpandSet);
+            ExpandSet.Reset();
+        }
+    }
+}
+
 void UDelaunatorValueUtility::ExpandPointValues(
     UDelaunatorObject* Delaunator,
     UDelaunatorValueObject* ValueObject,
@@ -275,6 +420,67 @@ void UDelaunatorValueUtility::ExpandPointValues(
         ExpandFilterCallback,
         ExpandValueCallback
         );
+}
+
+void UDelaunatorValueUtility::FilterPointsByNeighbours(
+    UDelaunatorObject* Delaunator,
+    TArray<int32>& OutPoints,
+    const TArray<int32>& InPoints,
+    UDelaunatorCompareOperatorLogic* CompareOperator
+    )
+{
+    OutPoints.Reset();
+
+    if (! IsValidDelaunay(Delaunator) || InPoints.Num() < 1)
+    {
+        return;
+    }
+
+    const int32 PointCount = Delaunator->GetPointCount();
+
+    FDelaunatorCompareCallback FilterCallback(nullptr);
+
+    // Get compare callback from compare operator
+    if (IsValid(CompareOperator))
+    {
+        if (CompareOperator->InitializeOperator(PointCount))
+        {
+            FilterCallback = CompareOperator->GetOperator();
+        }
+    }
+
+    if (! FilterCallback)
+    {
+        return;
+    }
+
+    OutPoints.Reserve(InPoints.Num());
+
+    TArray<int32> NeighbourPoints;
+
+    for (int32 PointIndex : InPoints)
+    {
+        NeighbourPoints.Reset();
+        Delaunator->GetPointNeighbours(NeighbourPoints, PointIndex);
+
+        bool bHasValidNeighbour = false;
+
+        for (int32 NeighbourPoint : NeighbourPoints)
+        {
+            if (FilterCallback(NeighbourPoint))
+            {
+                bHasValidNeighbour = true;
+                break;
+            }
+        }
+
+        if (bHasValidNeighbour)
+        {
+            OutPoints.Emplace(PointIndex);
+        }
+    }
+
+    OutPoints.Shrink();
 }
 
 void UDelaunatorValueUtility::GetRandomFilteredPointsWithinRadius(
@@ -363,67 +569,115 @@ void UDelaunatorValueUtility::GetRandomFilteredPointsWithinRadius(
     }
 }
 
-void UDelaunatorValueUtility::FilterCellsByNeighbours(
+void UDelaunatorValueUtility::MarkCellsWithinIndexedPolyGroups(
     UDelaunatorVoronoi* Voronoi,
-    TArray<int32>& OutCells,
-    const TArray<int32>& InCells,
-    UDelaunatorCompareOperatorLogic* CompareOperator
+    UDelaunatorValueObject* ValueObject,
+    TArray<FGULIntGroup>& OutBoundaryCellGroups,
+    const TArray<FGULIndexedPolyGroup>& InIndexGroups,
+    const TArray<FGULVector2DGroup>& InPolyGroups
     )
 {
-    OutCells.Reset();
+    OutBoundaryCellGroups.Reset();
 
-    if (! IsValidVoronoi(Voronoi) || InCells.Num() < 1)
+    if (! IsValidVoronoi(Voronoi) ||
+        InIndexGroups.Num() < 1   ||
+        InPolyGroups.Num() < 1)
     {
         return;
     }
 
     UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
 
-    const int32 PointCount = Delaunator->GetPointCount();
+    const TArray<FVector2D>& Points(Delaunator->GetPoints());
+    const int32 CellCount = Points.Num();
 
-    FDelaunatorCompareCallback FilterCallback(nullptr);
+    // Marked cell flags
+    TBitArray<> MarkedCells;
+    MarkedCells.Init(false, CellCount);
 
-    // Get compare callback from compare operator
-    if (IsValid(CompareOperator))
+    // Get mark cell callback from value object
+
+    TFunction<void(int32)> MarkCallback;
+
+    if (IsValid(ValueObject) &&
+        ValueObject->IsValidElementCount(CellCount))
     {
-        if (CompareOperator->InitializeOperator(PointCount))
+        MarkCallback = [ValueObject, &MarkedCells](int32 Index)
+            {
+                ValueObject->SetValueUInt8(Index, 1);
+                MarkedCells[Index] = true;
+            };
+    }
+    // Value object is invalid, use default mark callback
+    else
+    {
+        MarkCallback = [&MarkedCells](int32 Index)
+            {
+                MarkedCells[Index] = true;
+            };
+    }
+
+    // Generate boundary cells
+
+    const int32 PolyGroupCount = InPolyGroups.Num();
+
+    OutBoundaryCellGroups.Reset(PolyGroupCount);
+    OutBoundaryCellGroups.SetNum(PolyGroupCount);
+
+    for (int32 pgi=0; pgi<PolyGroupCount; ++pgi)
+    {
+        TArray<int32>& BoundaryCells(OutBoundaryCellGroups[pgi].Values);
+
+        FindPolyIntersectCells(Voronoi, BoundaryCells, InPolyGroups[pgi].Points);
+
+        // Mark boundary cells
+        for (int32 BoundaryCell : BoundaryCells)
         {
-            FilterCallback = CompareOperator->GetOperator();
+            MarkCallback(BoundaryCell);
         }
     }
 
-    if (! FilterCallback)
+    // Visit all boundary cell neighbours within indexed poly groups
+
+    for (const FGULIntGroup& BoundaryCellGroup : OutBoundaryCellGroups)
     {
-        return;
-    }
+        const TArray<int32>& BoundaryCells(BoundaryCellGroup.Values);
+        TArray<int32> NeighbourCells;
 
-    OutCells.Reserve(InCells.Num());
-
-    TArray<int32> NeighbourCells;
-
-    for (int32 Cell : InCells)
-    {
-        NeighbourCells.Reset();
-        Delaunator->GetPointNeighbours(NeighbourCells, Cell);
-
-        bool bHasValidNeighbour = false;
-
-        for (int32 NeighbourCell : NeighbourCells)
+        for (int32 BoundaryCell : BoundaryCells)
         {
-            if (FilterCallback(NeighbourCell))
+            NeighbourCells.Reset();
+            Delaunator->GetPointNeighbours(NeighbourCells, BoundaryCell);
+
+            for (int32 NeighbourCell : NeighbourCells)
             {
-                bHasValidNeighbour = true;
-                break;
+                // Skip visited cells
+                if (MarkedCells[NeighbourCell])
+                {
+                    continue;
+                }
+
+                // Mark cell visit without set value on value object
+                MarkedCells[NeighbourCell] = true;
+
+                // Check whether neighbour cell is on poly
+                if (UGULPolyUtilityLibrary::IsPointOnPoly(
+                    Points[NeighbourCell],
+                    InIndexGroups,
+                    InPolyGroups
+                    ) )
+                {
+                    // Point fill cell with marked cells as boundary
+                    PointFillVisit(
+                        Delaunator,
+                        NeighbourCell,
+                        &MarkedCells,
+                        MarkCallback
+                        );
+                }
             }
         }
-
-        if (bHasValidNeighbour)
-        {
-            OutCells.Emplace(Cell);
-        }
     }
-
-    OutCells.Shrink();
 }
 
 void UDelaunatorValueUtility::FindSegmentIntersectCells(
@@ -597,117 +851,6 @@ void UDelaunatorValueUtility::FindPolyIntersectCells(
 
             // Append segment cells as output
             OutCells.Append(MoveTemp(SegmentCells));
-        }
-    }
-}
-
-void UDelaunatorValueUtility::MarkCellsWithinIndexedPolyGroups(
-    UDelaunatorVoronoi* Voronoi,
-    UDelaunatorValueObject* ValueObject,
-    TArray<FGULIntGroup>& OutBoundaryCellGroups,
-    const TArray<FGULIndexedPolyGroup>& InIndexGroups,
-    const TArray<FGULVector2DGroup>& InPolyGroups
-    )
-{
-    OutBoundaryCellGroups.Reset();
-
-    if (! IsValidVoronoi(Voronoi) ||
-        InIndexGroups.Num() < 1   ||
-        InPolyGroups.Num() < 1)
-    {
-        return;
-    }
-
-    UDelaunatorObject* Delaunator = Voronoi->GetDelaunay();
-
-    const TArray<FVector2D>& Points(Delaunator->GetPoints());
-    const int32 CellCount = Points.Num();
-
-    // Marked cell flags
-    TBitArray<> MarkedCells;
-    MarkedCells.Init(false, CellCount);
-
-    // Get mark cell callback from value object
-
-    TFunction<void(int32)> MarkCallback;
-
-    if (IsValid(ValueObject) &&
-        ValueObject->IsValidElementCount(CellCount))
-    {
-        MarkCallback = [ValueObject, &MarkedCells](int32 Index)
-            {
-                ValueObject->SetValueUInt8(Index, 1);
-                MarkedCells[Index] = true;
-            };
-    }
-    // Value object is invalid, use default mark callback
-    else
-    {
-        MarkCallback = [&MarkedCells](int32 Index)
-            {
-                MarkedCells[Index] = true;
-            };
-    }
-
-    // Generate boundary cells
-
-    const int32 PolyGroupCount = InPolyGroups.Num();
-
-    OutBoundaryCellGroups.Reset(PolyGroupCount);
-    OutBoundaryCellGroups.SetNum(PolyGroupCount);
-
-    for (int32 pgi=0; pgi<PolyGroupCount; ++pgi)
-    {
-        TArray<int32>& BoundaryCells(OutBoundaryCellGroups[pgi].Values);
-
-        FindPolyIntersectCells(Voronoi, BoundaryCells, InPolyGroups[pgi].Points);
-
-        // Mark boundary cells
-        for (int32 BoundaryCell : BoundaryCells)
-        {
-            MarkCallback(BoundaryCell);
-        }
-    }
-
-    // Visit all boundary cell neighbours within indexed poly groups
-
-    for (const FGULIntGroup& BoundaryCellGroup : OutBoundaryCellGroups)
-    {
-        const TArray<int32>& BoundaryCells(BoundaryCellGroup.Values);
-        TArray<int32> NeighbourCells;
-
-        for (int32 BoundaryCell : BoundaryCells)
-        {
-            NeighbourCells.Reset();
-            Delaunator->GetPointNeighbours(NeighbourCells, BoundaryCell);
-
-            for (int32 NeighbourCell : NeighbourCells)
-            {
-                // Skip visited cells
-                if (MarkedCells[NeighbourCell])
-                {
-                    continue;
-                }
-
-                // Mark cell visit without set value on value object
-                MarkedCells[NeighbourCell] = true;
-
-                // Check whether neighbour cell is on poly
-                if (UGULPolyUtilityLibrary::IsPointOnPoly(
-                    Points[NeighbourCell],
-                    InIndexGroups,
-                    InPolyGroups
-                    ) )
-                {
-                    // Point fill cell with marked cells as boundary
-                    PointFillVisit(
-                        Delaunator,
-                        NeighbourCell,
-                        &MarkedCells,
-                        MarkCallback
-                        );
-                }
-            }
         }
     }
 }
@@ -909,7 +1052,7 @@ void UDelaunatorValueUtility::OptimizeCellBorders(TArray<int32>& OutCells, const
     }
 }
 
-void UDelaunatorValueUtility::GetCellsBorders(
+void UDelaunatorValueUtility::GetCellsBordersSorted(
     UDelaunatorVoronoi* Voronoi,
     TArray<int32>& OutBorderCells,
     const TArray<int32>& InCells

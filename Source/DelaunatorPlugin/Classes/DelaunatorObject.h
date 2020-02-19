@@ -47,7 +47,7 @@ class DELAUNATORPLUGIN_API UDelaunatorObject : public UObject
     TArray<int32> Hull;
     TArray<int32> HullIndex;
     TArray<int32> Inedges;
-    TBitArray<> BoundaryFlags;
+    //TBitArray<> BoundaryFlags;
 
     UPROPERTY()
     TMap<FName, UDelaunatorValueObject*> ValueMap;
@@ -104,7 +104,7 @@ public:
     const TArray<int32>& GetHalfEdges() const;
     const TArray<int32>& GetInedges() const;
     const TArray<int32>& GetHull() const;
-    const TBitArray<>& GetBoundaryFlags() const;
+    //const TBitArray<>& GetBoundaryFlags() const;
 
     void GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
     void GetTriangleIndicesFlat(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const;
@@ -196,6 +196,15 @@ public:
         );
 
     UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void ResetPointValueObject(UDelaunatorValueObject* ValueObject);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    void ResetTriangleValueObject(UDelaunatorValueObject* ValueObject);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    int32 FindPointByValue(UDelaunatorCompareOperator* CompareOperator);
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
     void FindPointsByValue(
         TArray<int32>& OutPointIndices,
         UDelaunatorCompareOperator* CompareOperator
@@ -206,13 +215,6 @@ public:
         TArray<int32>& OutTriangleIndices,
         UDelaunatorCompareOperator* CompareOperator
         );
-
-    //UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Generate Triangles Depth Values"))
-    //void K2_GenerateTrianglesDepthValues(
-    //    UDelaunatorValueObject* ValueObject,
-    //    const TArray<int32>& InitialPoints,
-    //    UDelaunatorCompareOperatorLogic* CompareOperator = nullptr
-    //    );
 
     // Triangles & Points Query
 
@@ -347,10 +349,10 @@ FORCEINLINE const TArray<int32>& UDelaunatorObject::GetHull() const
     return Hull;
 }
 
-FORCEINLINE const TBitArray<>& UDelaunatorObject::GetBoundaryFlags() const
-{
-    return BoundaryFlags;
-}
+//FORCEINLINE const TBitArray<>& UDelaunatorObject::GetBoundaryFlags() const
+//{
+//    return BoundaryFlags;
+//}
 
 inline void UDelaunatorObject::GetTriangleIndices(TArray<int32>& OutIndices, const TArray<int32>& InFilterTriangles) const
 {
@@ -521,13 +523,16 @@ FORCEINLINE void UDelaunatorObject::GetPointTriangles(TArray<int32>& OutTriangle
 
     check(GetTriangles().IsValidIndex(PointIndex));
 
-    if (BoundaryFlags[PointIndex])
+    //if (BoundaryFlags[PointIndex])
+    if (HullIndex[PointIndex] < 0)
     {
-        GetPointTrianglesBoundary(OutTriangleIndices, InTrianglePointIndex);
+        //GetPointTrianglesBoundary(OutTriangleIndices, InTrianglePointIndex);
+        GetPointTrianglesNonBoundary(OutTriangleIndices, InTrianglePointIndex);
     }
     else
     {
-        GetPointTrianglesNonBoundary(OutTriangleIndices, InTrianglePointIndex);
+        //GetPointTrianglesNonBoundary(OutTriangleIndices, InTrianglePointIndex);
+        GetPointTrianglesBoundary(OutTriangleIndices, InTrianglePointIndex);
     }
 }
 
@@ -543,13 +548,16 @@ FORCEINLINE void UDelaunatorObject::GetPointNeighboursByTrianglePoint(TArray<int
 
     check(GetTriangles().IsValidIndex(PointIndex));
 
-    if (BoundaryFlags[PointIndex])
+    //if (BoundaryFlags[PointIndex])
+    if (HullIndex[PointIndex] < 0)
     {
-        GetPointNeighboursBoundary(OutNeighbourIndices, InTrianglePointIndex);
+        //GetPointNeighboursBoundary(OutNeighbourIndices, InTrianglePointIndex);
+        GetPointNeighboursNonBoundary(OutNeighbourIndices, InTrianglePointIndex);
     }
     else
     {
-        GetPointNeighboursNonBoundary(OutNeighbourIndices, InTrianglePointIndex);
+        //GetPointNeighboursNonBoundary(OutNeighbourIndices, InTrianglePointIndex);
+        GetPointNeighboursBoundary(OutNeighbourIndices, InTrianglePointIndex);
     }
 }
 

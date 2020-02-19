@@ -41,6 +41,11 @@ void UDelaunatorCompareOperator::GetResults(TArray<int32>& OutPointIndices, int3
     OutPointIndices.Shrink();
 }
 
+int32 UDelaunatorCompareOperator::GetResult(int32 ElementCount)
+{
+    return InitializeOperator(ElementCount) ? GetResultImpl(ElementCount) : -1;
+}
+
 bool UDelaunatorCompareOperatorValueObject::InitializeOperator(int32 ElementCount)
 {
     return IsValid(ValueObject)
@@ -56,6 +61,19 @@ void UDelaunatorCompareOperatorLogic::GetResultsImpl(TArray<int32>& OutPointIndi
             OutPointIndices.Emplace(i);
         }
     }
+}
+
+int32 UDelaunatorCompareOperatorLogic::GetResultImpl(int32 ElementCount)
+{
+    for (int32 i=0; i<ElementCount; ++i)
+    {
+        if (Operator(i))
+        {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 bool UDelaunatorCompareOperatorUnary::InitializeOperator(int32 ElementCount)

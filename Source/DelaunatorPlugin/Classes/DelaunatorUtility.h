@@ -53,8 +53,19 @@ public:
     static void GenerateJitteredGridPoints(
         TArray<FVector2D>& OutPoints,
         int32& OutBoundaryPointOffset,
-        FBox2D Bounds,
+        FBox2D InBounds,
         float MaxDeviation = .85f,
-        int32 CellCountPerDimension = 100
+        int32 CellCountPerDimension = 100,
+        int32 ExpansionCount = 0
+        );
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator")
+    static void GenerateJitteredGridPointsUniform(
+        TArray<FVector2D>& OutPoints,
+        int32& OutBoundaryPointOffset,
+        FBox2D InBounds,
+        float MaxDeviation = .85f,
+        int32 CellCountPerDimension = 100,
+        int32 ExpansionCount = 0
         );
 };

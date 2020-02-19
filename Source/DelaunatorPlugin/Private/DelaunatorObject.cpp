@@ -62,6 +62,15 @@ void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
         {
             HullIndex[Hull[i]] = i;
         }
+
+        // Generate hull point flags
+        
+        //BoundaryFlags.Init(false, GetPointCount());
+
+        //for (int32 i : Hull)
+        //{
+        //    BoundaryFlags[i] = true;
+        //}
     }
     
 
@@ -82,15 +91,6 @@ void UDelaunatorObject::UpdateFromPoints(const TArray<FVector2D>& InPoints)
         {
             Inedges[p] = e;
         }
-    }
-
-    // Generate boundary flags
-    
-    BoundaryFlags.Init(false, GetPointCount());
-
-    for (int32 i : Hull)
-    {
-        BoundaryFlags[i] = true;
     }
 }
 
@@ -156,6 +156,29 @@ UDelaunatorValueObject* UDelaunatorObject::CreateDefaultTriangleValueObject(
     }
 
     return ValueObject;
+}
+
+void UDelaunatorObject::ResetPointValueObject(UDelaunatorValueObject* ValueObject)
+{
+    if (IsValid(ValueObject))
+    {
+        ValueObject->InitializeValues(GetPointCount());
+    }
+}
+
+void UDelaunatorObject::ResetTriangleValueObject(UDelaunatorValueObject* ValueObject)
+{
+    if (IsValid(ValueObject))
+    {
+        ValueObject->InitializeValues(GetTriangleCount());
+    }
+}
+
+int32 UDelaunatorObject::FindPointByValue(UDelaunatorCompareOperator* CompareOperator)
+{
+    return IsValid(CompareOperator)
+        ? CompareOperator->GetResult(GetPointCount())
+        : -1;
 }
 
 void UDelaunatorObject::FindPointsByValue(

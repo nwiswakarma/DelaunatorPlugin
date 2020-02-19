@@ -87,28 +87,6 @@ void UDelaunatorVoronoi::Update()
 
         Circumcenters[ti] = FVector2D(x, y);
     }
-
-    // Compute exterior cell rays.
-
-    HullVectors.SetNumUninitialized(InHull.Num()*4);
-
-    int32 h = InHull.Num()-1;
-    int32 pi0;
-    int32 pi1 = h * 4;
-
-    FVector2D P0;
-    FVector2D P1 = InPoints[InHull[h]];
-
-    for (int32 i=0; i<InHull.Num(); ++i)
-    {
-        h = i;
-        pi0 = pi1;
-        pi1 = h*4;
-        P0 = P1;
-        P1 = InPoints[InHull[h]];
-        HullVectors[pi0+2] = HullVectors[pi1  ] = P0.Y - P1.Y;
-        HullVectors[pi0+3] = HullVectors[pi1+1] = P1.X - P0.X;
-    }
 }
 
 void UDelaunatorVoronoi::GenerateFrom(UDelaunatorObject* InDelaunator)

@@ -107,6 +107,24 @@ class DELAUNATORPLUGIN_API UDelaunatorValueObject : public UObject
 
 public:
 
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Value UInt8"))
+    virtual uint8 K2_GetValueUInt8(int32 Index) const
+    {
+        return GetValueUInt8(Index);
+    }
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Value Int32"))
+    virtual int32 K2_GetValueInt32(int32 Index) const
+    {
+        return GetValueInt32(Index);
+    }
+
+    UFUNCTION(BlueprintCallable, Category="Delaunator", meta=(DisplayName="Get Value Float"))
+    virtual float K2_GetValueFloat(int32 Index) const
+    {
+        return GetValueFloat(Index);
+    }
+
     FORCEINLINE virtual void InitializeValues(int32 ValueCount)
     {
         // Blank Implementation

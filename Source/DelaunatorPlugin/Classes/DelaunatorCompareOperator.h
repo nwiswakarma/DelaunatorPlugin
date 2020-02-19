@@ -72,6 +72,12 @@ protected:
         // Blank Implementation
     }
 
+    FORCEINLINE virtual int32 GetResultImpl(int32 ElementCount)
+    {
+        // Blank Implementation
+        return -1;
+    }
+
 public:
 
     FORCEINLINE virtual bool InitializeOperator(int32 ElementCount)
@@ -80,6 +86,7 @@ public:
     }
 
     void GetResults(TArray<int32>& OutPointIndices, int32 ElementCount);
+    int32 GetResult(int32 ElementCount);
 };
 
 UCLASS()
@@ -105,6 +112,8 @@ protected:
     FDelaunatorCompareCallback Operator;
 
     virtual void GetResultsImpl(TArray<int32>& OutPointIndices, int32 ElementCount) override;
+
+    virtual int32 GetResultImpl(int32 ElementCount) override;
 
 public:
 
